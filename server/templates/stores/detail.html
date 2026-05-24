@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ store.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ store.name }} <small style="color:var(--muted)">({{ store.store_id }})</small></h2>
+  {% if group %}
+  <p class="hint">Grupo: <strong>{{ group.name }}</strong> ({{ group.group_code }})</p>
+  {% endif %}
+  {% if store.street or store.city %}
+  <p class="hint">
+    Endereço:
+    {{ store.street }}{% if store.number %}, {{ store.number }}{% endif %}
+    {% if store.neighborhood %} — {{ store.neighborhood }}{% endif %}
+    {% if store.city %} · {{ store.city }}{% if store.state %}/{{ store.state }}{% endif %}{% endif %}
+    {% if store.cep %} · CEP: {{ store.cep }}{% endif %}
+  </p>
+  {% endif %}
+  <p class="hint">
+    Timezone: {{ store.timezone }} ·
+    OCR a cada {{ store.ocr_sample_interval_sec }}s ·
+    Delta POS: {{ store.pos_match_delta_sec }}s
+  </p>
+  <div class="actions" style="margin-top:12px">
+    <a class="btn" href="/stores/{{ store.id }}/cameras/new">+ Câmera</a>
+    <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Voltar</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Câmeras e OCR ROI</h2>
+  {% if cameras %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Descrição</th>
+        <th>OCR ROI (x, y, w, h)</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cam in cameras %}
+      <tr>
+        <td><strong>{{ cam.camera_id }}</strong></td>
+        <td>{{ cam.description or '—' }}</td>
+        <td>
+          <code>{{ cam.ocr_x }}, {{ cam.ocr_y }}, {{ cam.ocr_width }}, {{ cam.ocr_height }}</code>
+        </td>
+        <td class="actions">
+          <a class="btn btn-secondary"
+             href="/stores/{{ store.id }}/cameras/{{ cam.id }}/roi-editor">Editar ROI</a>
+          <a class="btn btn-secondary"
+             href="/stores/{{ store.id }}/cameras/{{ cam.id }}/edit">Editar</a>
+          <form method="post"
+                action="/stores/{{ store.id }}/cameras/{{ cam.id }}/delete"
+                onsubmit="return confirm('Remover câmera {{ cam.camera_id }}?')">
+            <button type="submit" class="btn btn-danger">Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nenhuma câmera. Adicione cam1 (entrada) e cam2 (checkout).</p>
+  {% endif %}
+</div>
+
+{% if group %}
+<p class="hint"><a href="/groups/{{ group.id }}">← Voltar ao grupo {{ group.name }}</a></p>
+{% endif %}
+{% endblock %}

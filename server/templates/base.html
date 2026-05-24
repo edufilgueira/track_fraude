@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Painel{% endblock %} — track_fraude</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><a href="/groups">track_fraude</a></h1>
+      <div class="header-actions">
+        <a class="btn btn-secondary" href="/groups/new">+ Novo grupo</a>
+        <a class="btn btn-secondary" href="/logout">Sair</a>
+      </div>
+    </header>
+
+    {% if message %}
+    <div class="flash">{{ message }}</div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    <footer>Painel web — configuração de grupos, lojas e câmeras</footer>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

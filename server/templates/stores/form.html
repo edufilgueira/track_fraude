@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{% if store %}Editar loja{% else %}Nova loja{% endif %}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>
+    {% if store %}Editar loja{% else %}Cadastrar loja{% endif %}
+    {% if group %} — {{ group.name }}{% endif %}
+  </h2>
+
+  <form method="post" action="{{ action }}" class="form-grid">
+    <h3 class="section-title">Identificação</h3>
+    <div class="form-row">
+      <label for="store_id">Código da loja (store_id)</label>
+      <input id="store_id" name="store_id" required maxlength="32"
+             value="{{ store.store_id if store else '' }}" placeholder="LOJA-01">
+    </div>
+    <div class="form-row">
+      <label for="name">Nome</label>
+      <input id="name" name="name" required maxlength="120"
+             value="{{ store.name if store else '' }}" placeholder="Supermercado Centro">
+    </div>
+
+    <h3 class="section-title">Endereço</h3>
+    <div class="form-row-inline address-grid">
+      <div class="form-row span-2">
+        <label for="street">Rua</label>
+        <input id="street" name="street" maxlength="200"
+               value="{{ store.street if store else '' }}" placeholder="Av. Brasil">
+      </div>
+      <div class="form-row">
+        <label for="number">Número</label>
+        <input id="number" name="number" maxlength="20"
+               value="{{ store.number if store else '' }}" placeholder="1234">
+      </div>
+      <div class="form-row">
+        <label for="neighborhood">Bairro</label>
+        <input id="neighborhood" name="neighborhood" maxlength="120"
+               value="{{ store.neighborhood if store else '' }}" placeholder="Centro">
+      </div>
+      <div class="form-row">
+        <label for="city">Cidade</label>
+        <input id="city" name="city" maxlength="120"
+               value="{{ store.city if store else '' }}" placeholder="São Paulo">
+      </div>
+      <div class="form-row">
+        <label for="state">Estado (UF)</label>
+        <input id="state" name="state" maxlength="2"
+               value="{{ store.state if store else '' }}" placeholder="SP">
+      </div>
+      <div class="form-row">
+        <label for="cep">CEP</label>
+        <input id="cep" name="cep" maxlength="9"
+               value="{{ store.cep if store else '' }}" placeholder="00000-000">
+      </div>
+    </div>
+
+    <h3 class="section-title">Processamento (OCR / POS)</h3>
+    <div class="form-row">
+      <label for="timezone">Timezone</label>
+      <input id="timezone" name="timezone" required
+             value="{{ store.timezone if store else 'America/Sao_Paulo' }}">
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label for="ocr_sample_interval_sec">OCR intervalo (s)</label>
+        <input type="number" id="ocr_sample_interval_sec" name="ocr_sample_interval_sec" min="5"
+               value="{{ store.ocr_sample_interval_sec if store else 30 }}">
+      </div>
+      <div class="form-row">
+        <label for="ocr_min_confidence">OCR confiança mín.</label>
+        <input type="number" step="0.01" id="ocr_min_confidence" name="ocr_min_confidence" min="0" max="1"
+               value="{{ store.ocr_min_confidence if store else 0.5 }}">
+      </div>
+      <div class="form-row">
+        <label for="pos_match_delta_sec">Delta POS (s)</label>
+        <input type="number" id="pos_match_delta_sec" name="pos_match_delta_sec" min="0"
+               value="{{ store.pos_match_delta_sec if store else 60 }}">
+      </div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="active" name="active" {% if not store or store.active %}checked{% endif %}>
+      <label for="active">Loja ativa</label>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn">Salvar</button>
+      <a class="btn btn-secondary"
+         href="{% if group %}/groups/{{ group.id }}{% elif store %}/groups/{{ store.group_db_id }}{% else %}/groups{% endif %}">
+        Voltar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

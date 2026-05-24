@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Lojas{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Lojas cadastradas</h2>
+  {% if stores %}
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nome</th>
+        <th>Timezone</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for store in stores %}
+      <tr>
+        <td><strong>{{ store.store_id }}</strong></td>
+        <td>{{ store.name }}</td>
+        <td>{{ store.timezone }}</td>
+        <td>
+          {% if store.active %}
+          <span class="badge badge-active">Ativa</span>
+          {% else %}
+          <span class="badge badge-inactive">Inativa</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a class="btn btn-secondary" href="/stores/{{ store.id }}">Configurar</a>
+          <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Editar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nenhuma loja cadastrada. Clique em <strong>Nova loja</strong> para começar.</p>
+  {% endif %}
+</div>
+{% endblock %}

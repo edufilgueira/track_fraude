@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{% if camera %}Editar {{ camera.camera_id }}{% else %}Nova câmera{% endif %}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{% if camera %}Editar câmera{% else %}Cadastrar câmera{% endif %} — {{ store.name }}</h2>
+  <p class="hint">
+    Configure a região (ROI) onde o timestamp aparece no vídeo.
+    Valores em pixels a partir do canto superior esquerdo do frame.
+  </p>
+  <form method="post" action="{{ action }}" class="form-grid" id="camera-form">
+    <div class="form-row">
+      <label for="camera_id">ID da câmera</label>
+      <input id="camera_id" name="camera_id" required maxlength="32"
+             value="{{ camera.camera_id if camera else '' }}" placeholder="cam1 ou cam2">
+    </div>
+    <div class="form-row">
+      <label for="description">Descrição</label>
+      <input id="description" name="description" maxlength="200"
+             value="{{ camera.description if camera else '' }}"
+             placeholder="Entrada / Self-checkout">
+    </div>
+    <div class="form-row">
+      <label>OCR ROI — retângulo do timestamp</label>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label for="ocr_x">X</label>
+          <input type="number" id="ocr_x" name="ocr_x" min="0" required
+                 value="{{ camera.ocr_x if camera else 10 }}">
+        </div>
+        <div class="form-row">
+          <label for="ocr_y">Y</label>
+          <input type="number" id="ocr_y" name="ocr_y" min="0" required
+                 value="{{ camera.ocr_y if camera else 10 }}">
+        </div>
+        <div class="form-row">
+          <label for="ocr_width">Largura</label>
+          <input type="number" id="ocr_width" name="ocr_width" min="1" required
+                 value="{{ camera.ocr_width if camera else 420 }}">
+        </div>
+        <div class="form-row">
+          <label for="ocr_height">Altura</label>
+          <input type="number" id="ocr_height" name="ocr_height" min="1" required
+                 value="{{ camera.ocr_height if camera else 50 }}">
+        </div>
+      </div>
+    </div>
+    <div class="roi-preview" id="roi-preview"></div>
+    {% if camera %}
+    <div class="actions" style="margin-top: 0; margin-bottom: 12px;">
+      <a class="btn" href="/stores/{{ store.id }}/cameras/{{ camera.id }}/roi-editor">
+        Selecionar ROI no vídeo
+      </a>
+    </div>
+    {% endif %}
+    <div class="actions">
+      <button type="submit" class="btn">Salvar câmera</button>
+      <a class="btn btn-secondary" href="/stores/{{ store.id }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  function updatePreview() {
+    const x = document.getElementById('ocr_x').value;
+    const y = document.getElementById('ocr_y').value;
+    const w = document.getElementById('ocr_width').value;
+    const h = document.getElementById('ocr_height').value;
+    document.getElementById('roi-preview').textContent =
+      `ROI: x=${x}, y=${y}, width=${w}, height=${h}  →  canto inferior direito: (${Number(x)+Number(w)}, ${Number(y)+Number(h)})`;
+  }
+  ['ocr_x','ocr_y','ocr_width','ocr_height'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updatePreview);
+  });
+  updatePreview();
+</script>
+{% endblock %}

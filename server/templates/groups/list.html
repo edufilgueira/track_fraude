@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Grupos{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Grupos cadastrados</h2>
+  {% if groups %}
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nome</th>
+        <th>Lojas</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in groups %}
+      <tr>
+        <td><strong>{{ group.group_code }}</strong></td>
+        <td>{{ group.name }}</td>
+        <td>{{ store_counts.get(group.id, 0) }}</td>
+        <td>
+          {% if group.active %}
+          <span class="badge badge-active">Ativo</span>
+          {% else %}
+          <span class="badge badge-inactive">Inativo</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a class="btn btn-secondary" href="/groups/{{ group.id }}">Lojas</a>
+          <a class="btn btn-secondary" href="/groups/{{ group.id }}/edit">Editar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nenhum grupo cadastrado. Clique em <strong>Novo grupo</strong> para começar.</p>
+  {% endif %}
+</div>
+{% endblock %}

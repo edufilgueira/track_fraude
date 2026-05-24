@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ group.name }} <small style="color:var(--muted)">({{ group.group_code }})</small></h2>
+  <div class="actions" style="margin-top:12px">
+    <a class="btn" href="/groups/{{ group.id }}/stores/new">+ Nova loja</a>
+    <a class="btn btn-secondary" href="/groups/">Voltar</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Lojas do grupo</h2>
+  {% if stores %}
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nome</th>
+        <th>Cidade</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for store in stores %}
+      <tr>
+        <td><strong>{{ store.store_id }}</strong></td>
+        <td>{{ store.name }}</td>
+        <td>{{ store.city or '—' }}{% if store.state %} / {{ store.state }}{% endif %}</td>
+        <td>
+          {% if store.active %}
+          <span class="badge badge-active">Ativa</span>
+          {% else %}
+          <span class="badge badge-inactive">Inativa</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a class="btn btn-secondary" href="/stores/{{ store.id }}">Configurar</a>
+          <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Editar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nenhuma loja neste grupo. Clique em <strong>Nova loja</strong>.</p>
+  {% endif %}
+</div>
+
+<p class="hint">
+  <a href="/groups">← Voltar aos grupos</a>
+</p>
+{% endblock %}

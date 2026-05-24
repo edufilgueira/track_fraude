@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{% if group %}Editar grupo{% else %}Novo grupo{% endif %}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{% if group %}Editar grupo{% else %}Cadastrar grupo{% endif %}</h2>
+  <form method="post" action="{{ action }}" class="form-grid">
+    <div class="form-row">
+      <label for="group_code">Código do grupo</label>
+      <input id="group_code" name="group_code" required maxlength="32"
+             value="{{ group.group_code if group else '' }}" placeholder="cometa">
+      <span class="hint">Identificador único (ex: cometa, rede-sul)</span>
+    </div>
+    <div class="form-row">
+      <label for="name">Nome do grupo</label>
+      <input id="name" name="name" required maxlength="120"
+             value="{{ group.name if group else '' }}" placeholder="Grupo Cometa">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="active" name="active" {% if not group or group.active %}checked{% endif %}>
+      <label for="active">Grupo ativo</label>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn">Salvar</button>
+      <a class="btn btn-secondary" href="{% if group %}/groups/{{ group.id }}{% else %}/groups{% endif %}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+.venv/
+server/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Vídeos gerados localmente (mantém estrutura via .gitkeep)
+data/raw/video/**/*.mp4
+data/raw/video/**/*_meta.json
+
+# Artefatos processados (sync, tracks, pipeline_state)
+data/processed/**/*
+!data/processed/.gitkeep
+
+# Entregáveis finais (alertas, clips)
+data/output/**/*
+!data/output/.gitkeep
+
+# Banco SQLite local
+data/track_fraude.db

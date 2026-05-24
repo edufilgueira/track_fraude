@@ -1,0 +1,14 @@
+app:
+  name: track_fraude
+  host: 127.0.0.1
+  port: 8080
+  secret_key: troque-esta-chave-em-producao
+
+database:
+  # Relativo à raiz do repo (track_fraude/) ou absoluto (local, UNC, rede)
+  path: data/track_fraude.db
+
+auth:
+  admin_username: admin
+  admin_password: admin123
+  admin_display_name: Administrador

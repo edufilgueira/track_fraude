@@ -1,0 +1,16 @@
+# Instalar SOMENTE a partir desta pasta (server/):
+#   cd server
+#   python -m venv .venv
+#   .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# (../core é relativo a server/ — não use pip -r server/requirements.txt na raiz)
+
+-e ../core
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
+itsdangerous>=2.1.0
+pyyaml>=6.0
+opencv-python-headless>=4.8.0

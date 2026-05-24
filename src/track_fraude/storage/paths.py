@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+DEFAULT_PROCESSED_DIR = Path("data/processed")
+DEFAULT_OUTPUT_DIR = Path("data/output")
+
+
+def processed_root(project_root: Path | str) -> Path:
+    """Raiz dos artefatos intermediários (sync, tracks, pipeline_state)."""
+    return Path(project_root) / DEFAULT_PROCESSED_DIR
+
+
+def output_root(project_root: Path | str) -> Path:
+    """Raiz dos entregáveis finais (alertas, clips, índices para revisão)."""
+    return Path(project_root) / DEFAULT_OUTPUT_DIR
+
+
+@dataclass(frozen=True)
+class StoreScope:
+    """Escopo de dados por grupo + loja (mesma hierarquia em processed e output)."""
+
+    root: Path
+    group_code: str
+    store_id: str
+
+    @classmethod
+    def from_config(cls, root: Path | str, config: dict) -> StoreScope:
+        group_code = str(config.get("group_code") or "default").strip() or "default"
+        store_id = str(config["store_id"]).strip()
+        return cls(root=Path(root), group_code=group_code, store_id=store_id)
+
+    def date_dir(self, date: str) -> Path:
+        return self.root / self.group_code / self.store_id / date
+
+
+@dataclass(frozen=True)
+class ProcessedScope(StoreScope):
+    """Artefatos técnicos do pipeline em data/processed/."""
+
+    def pipeline_state_path(self, date: str) -> Path:
+        return self.date_dir(date) / "pipeline_state.json"
+
+    def sync_map_path(self, date: str, camera_id: str) -> Path:
+        return self.date_dir(date) / camera_id / "sync_map.json"
+
+    def tracks_path(self, date: str, camera_id: str) -> Path:
+        return self.date_dir(date) / camera_id / "tracks.json"
+
+
+@dataclass(frozen=True)
+class OutputScope(StoreScope):
+    """Entregáveis para revisão humana em data/output/."""
+
+    def alerts_index_path(self, date: str) -> Path:
+        return self.date_dir(date) / "alerts" / "index.json"
+
+    def alert_dir(self, date: str, alert_id: str) -> Path:
+        return self.date_dir(date) / "alerts" / alert_id
