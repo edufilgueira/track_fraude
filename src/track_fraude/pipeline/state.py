@@ -17,3 +17,19 @@ def sync_phase_status(state: dict[str, Any], camera_ids: list[str]) -> str:
     if any(status == "completed" for status in statuses):
         return "partial"
     return "pending"
+
+
+def track_phase_status(state: dict[str, Any], camera_ids: list[str]) -> str:
+    """Calcula status da fase track com base nas câmeras cadastradas."""
+    if not camera_ids:
+        return "completed"
+
+    statuses = [
+        state.get("cameras", {}).get(cam, {}).get("track", "pending")
+        for cam in camera_ids
+    ]
+    if all(status == "completed" for status in statuses):
+        return "completed"
+    if any(status == "completed" for status in statuses):
+        return "partial"
+    return "pending"

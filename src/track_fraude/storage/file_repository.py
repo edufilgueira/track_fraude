@@ -11,6 +11,7 @@ from track_fraude.storage.base import (
     TrackRepository,
 )
 from track_fraude.storage.paths import ProcessedScope
+from track_fraude.track.parquet_io import read_tracks_parquet, write_tracks_parquet
 
 
 class FileTrackRepository(TrackRepository):
@@ -19,15 +20,11 @@ class FileTrackRepository(TrackRepository):
 
     def save_tracks(self, camera_id: str, date: str, tracks: list[dict[str, Any]]) -> Path:
         path = self.scope.tracks_path(date, camera_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as handle:
-            json.dump(tracks, handle, indent=2, ensure_ascii=False)
-        return path
+        return write_tracks_parquet(path, tracks)
 
     def load_tracks(self, camera_id: str, date: str) -> list[dict[str, Any]]:
         path = self.scope.tracks_path(date, camera_id)
-        with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
+        return read_tracks_parquet(path)
 
 
 class FileSyncMapRepository(SyncMapRepository):

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from track_fraude.pipeline.state import sync_phase_status
+from track_fraude.pipeline.state import sync_phase_status, track_phase_status
 from track_fraude.storage import (
     FilePipelineStateRepository,
     OutputScope,
@@ -68,6 +68,19 @@ def test_sync_phase_status_only_counts_configured_cameras():
     assert sync_phase_status(state, ["cam1"]) == "completed"
     assert sync_phase_status(state, ["cam1", "cam2"]) == "partial"
     assert sync_phase_status(state, ["cam1", "cam2", "cam3"]) == "partial"
+
+
+def test_track_phase_status_only_counts_configured_cameras():
+    state = {
+        "cameras": {
+            "cam1": {"track": "completed"},
+            "cam2": {"track": "pending"},
+            "legacy_cam": {"track": "pending"},
+        }
+    }
+    assert track_phase_status(state, ["cam1"]) == "completed"
+    assert track_phase_status(state, ["cam1", "cam2"]) == "partial"
+    assert track_phase_status(state, ["cam2"]) == "pending"
 
 
 def test_output_scope_from_config():

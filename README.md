@@ -32,7 +32,7 @@ data/
 
 ```powershell
 pip install -e ./core
-pip install -e ".[dev]"
+pip install -e ".[dev,track]"
 python tools/init_db.py              # schema SQLite
 python tools/seed_demo_store.py      # opcional: grupo Cometa + LOJA-01 + cam1/cam2
 ```
@@ -67,6 +67,21 @@ Use `--group-code` quando existir mais de uma loja com o mesmo `store_id` no ban
 
 OCR obrigatório: instale [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (Windows) ou `sudo apt install tesseract-ocr` (Linux) e garanta que está no PATH.
 
+## Fase 2 — Tracking (1 câmera)
+
+Requer Fase 1 (`sync_map.json`) e `pip install -e ".[track]"` (Ultralytics YOLOv8).
+
+```powershell
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+```
+
+Saída: `data/processed/{group_code}/{store_id}/{date}/{camera}/tracks.parquet` + `manifest.json`.  
+Colunas: `track_id`, `frame_idx`, `t_abs`, `x1`, `y1`, `x2`, `y2` (bbox).  
+`--vid-stride` processa 1 a cada N frames (CPU ok com `yolov8n.pt`).
+
+Para validar ≥3 pessoas, use um vídeo real com tráfego (`--video caminho.mp4`).
+
 ## Testes
 
 ```powershell
@@ -78,4 +93,23 @@ pytest
 
 Acesse o painel: **http://127.0.0.1:8080/login** (`admin` / `admin123` — altere em `server/config/settings.yaml`)
 
-Próximo passo: **Fase 2** — YOLO + tracking (`jobs/run_track.py`).
+Próximo passo: **Fase 3** — zonas, eventos e regra R1.
+
+
+### Cam1 (porta):
+```powershell
+python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
+python tools/render_track_overlay.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+```
+
+### Cam2 (caixa):
+```powershell
+python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+```
+
+
+### Validar sync ↔ POS (cam2, se tiver POS alinhado):
+python jobs/validate_sync_pos.py --date 2026-05-22 --camera cam2 --frame 6550 --store-id LOJA-01 --group-code default

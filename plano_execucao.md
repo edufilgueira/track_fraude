@@ -103,6 +103,49 @@ Detectar e rastrear **múltiplas pessoas** em uma câmera; persistir tracks.
 ### Dependências
 Fase 1 (`sync_map` pronto).
 
+
+
+### Checklist Fase 2 (plano)
+
+| Critério | Status no seu teste |
+|----------|---------------------|
+| `run_track.py` + Parquet + manifest | ✅ cam1 rodou (`tracks.parquet`, 30 detecções) |
+| Colunas `track_id`, `frame_idx`, `t_abs`, bbox | ✅ |
+| `t_abs` via `sync_map` | ✅ (sync cam1 ok) |
+| Parquet legível | ✅ (pode inspecionar com pandas/pyarrow) |
+| Overlay debug (`render_track_overlay.py`) | ⚠️ confirme se rodou e revisou o MP4 |
+| **≥3 pessoas** com ID estável | ⚠️ seu run deu **2 tracks únicos** — abaixo do critério |
+| Clip 5–15 min (opcional no plano) | ⚠️ seu clip parece ~1 min |
+
+### Conclusão prática
+
+- **Tecnicamente (software):** Fase 2 **implementada** ✅  
+- **Validação de negócio (loja real):** Fase 2 **parcial** ⚠️ — falta provar tracking com **≥3 pessoas** e IDs estáveis no overlay.
+
+Isso não impede avançar no **código** da Fase 3, mas o plano diz: *“só avance quando a fase anterior estiver validada”*.
+
+### Recomendação
+
+**Antes da Fase 3 (ideal):**
+1. Rodar overlay na cam1 e olhar se os 2 IDs fazem sentido.
+2. Testar com vídeo onde apareçam **≥3 pessoas** (ou `--vid-stride 2` se perder detecção).
+3. Quando tiver **cam2 fixa no caixa**: sync + track cam2 (Fase 3 usa **cam2** de verdade).
+
+**Pode ir para Fase 3 se:**
+- Aceita fechar Fase 2 como “pipeline ok, qualidade a refinar com cam2”.
+- Fase 3 precisa sobretudo de **cam2 + zonas + POS** — aí cam2 vira prioridade de configuração, não só de tracking.
+
+### Fase 3 — o que vem
+
+- Polígonos de zona (lanes checkout, entrada/saída)
+- `run_events.py` → timeline (entrou, sessão caixa, saiu)
+- Match POS + **R1** (ficou no caixa sem venda)
+
+**Resumo:** não é “só ir para Fase 3” cegamente — **sim, o próximo passo do produto é Fase 3**, mas marque Fase 2 como concluída quando tiver overlay revisado e ideally **≥3 pessoas** (ou documente que cam1 provisória só deu 2). A **cam2 do caixa** será central na Fase 3 de qualquer forma.
+
+
+
+
 ---
 
 ## Fase 3 — Zonas, eventos e primeira regra (R1)

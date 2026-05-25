@@ -113,7 +113,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         default=None,
-        help="Caminho do mp4 (default: data/raw/video/{date}/{camera}_test.mp4)",
+        help="Caminho do mp4 (default: data/raw/video/{date}/{camera}.mp4)",
     )
     args = parser.parse_args()
 
@@ -128,7 +128,7 @@ def main() -> None:
         / "raw"
         / "video"
         / args.date
-        / f"{args.camera}_test.mp4"
+        / f"{args.camera}.mp4"
     )
     start_time = datetime.fromisoformat(args.start_time)
 

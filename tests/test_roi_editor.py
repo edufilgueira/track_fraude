@@ -107,7 +107,81 @@ def test_roi_editor_page_has_file_picker(client: TestClient, repo: StoreReposito
     assert response.status_code == 200
     assert "Selecionar ROI" in response.text
     assert 'id="video-file"' in response.text
+    assert 'id="load-from-storage"' in response.text
     assert "roi_editor.js" in response.text
+
+
+def test_frame_preview_get(client: TestClient, repo: StoreRepository, group_repo: GroupRepository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("cv2")
+    import cv2
+    import numpy as np
+    from server.services import video_storage
+
+    store_id, camera_id = seed_store_with_camera(repo, group_repo)
+    login(client)
+
+    video_dir = tmp_path / "data" / "raw" / "video" / "2026-05-22"
+    video_dir.mkdir(parents=True)
+    video_path = video_dir / "cam2.mp4"
+    writer = cv2.VideoWriter(str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), 25, (640, 360))
+    frame = np.zeros((360, 640, 3), dtype=np.uint8)
+    frame[:] = (80, 80, 80)
+    writer.write(frame)
+    writer.release()
+
+    monkeypatch.setattr(video_storage, "PROJECT_ROOT", tmp_path)
+
+    response = client.get(
+        f"/stores/{store_id}/cameras/{camera_id}/frame-preview",
+        params={"date": "2026-05-22", "seconds": 0},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert len(response.content) > 1000
+
+
+def test_frame_from_storage_extracts_jpeg(
+    client: TestClient,
+    repo: StoreRepository,
+    group_repo: GroupRepository,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    pytest.importorskip("cv2")
+    import cv2
+    import numpy as np
+
+    from server.services import video_storage
+
+    store_id, camera_id = seed_store_with_camera(repo, group_repo)
+    login(client)
+
+    video_dir = tmp_path / "data" / "raw" / "video" / "2026-05-22"
+    video_dir.mkdir(parents=True)
+    video_path = video_dir / "cam2.mp4"
+    writer = cv2.VideoWriter(
+        str(video_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        25,
+        (640, 360),
+    )
+    frame = np.zeros((360, 640, 3), dtype=np.uint8)
+    frame[:] = (30, 30, 30)
+    cv2.putText(frame, "08:00:00", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    writer.write(frame)
+    writer.release()
+
+    monkeypatch.setattr(video_storage, "PROJECT_ROOT", tmp_path)
+
+    response = client.post(
+        f"/stores/{store_id}/cameras/{camera_id}/frame-from-storage",
+        data={"date": "2026-05-22", "seconds": "0"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert int(response.headers["X-Frame-Width"]) == 640
+    assert "cam2.mp4" in response.headers.get("X-Video-Path", "")
 
 
 def test_frame_upload_extracts_jpeg(
@@ -123,7 +197,7 @@ def test_frame_upload_extracts_jpeg(
     store_id, camera_id = seed_store_with_camera(repo, group_repo)
     login(client)
 
-    video_path = tmp_path / "cam2_test.mp4"
+    video_path = tmp_path / "cam2.mp4"
     writer = cv2.VideoWriter(
         str(video_path),
         cv2.VideoWriter_fourcc(*"mp4v"),
@@ -139,7 +213,7 @@ def test_frame_upload_extracts_jpeg(
     with video_path.open("rb") as handle:
         response = client.post(
             f"/stores/{store_id}/cameras/{camera_id}/frame-upload",
-            files={"video": ("cam2_test.mp4", handle, "video/mp4")},
+            files={"video": ("cam2.mp4", handle, "video/mp4")},
             data={"seconds": "0"},
         )
 

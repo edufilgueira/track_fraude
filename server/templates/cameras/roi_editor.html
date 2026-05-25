@@ -4,39 +4,56 @@
 <div class="card">
   <h2>Selecionar ROI — {{ camera.camera_id }}</h2>
   <p class="hint">
-    Escolha um arquivo de vídeo do seu computador, capture um frame e arraste sobre o timestamp.
-    As coordenadas são salvas automaticamente ao soltar o mouse.
+    Vídeo esperado: <code>{{ video_relpath }}</code>.
+    A captura usa OpenCV no servidor (ideal para DVR).
     Loja: <strong>{{ store.name }}</strong>
   </p>
 
   <div class="roi-controls form-grid">
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label for="video-date">Data da gravação</label>
+        <input type="date" id="video-date" value="{{ default_video_date }}">
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <button type="button" class="btn" id="load-from-storage">
+          Carregar {{ camera.camera_id }}.mp4
+        </button>
+      </div>
+    </div>
     <div class="form-row">
-      <label for="video-file">Arquivo de gravação</label>
+      <label for="video-file">Ou escolha um arquivo local (upload)</label>
       <input type="file" id="video-file" accept="video/*,.mp4,.avi,.mkv,.mov,.webm">
       <span class="hint" id="video-file-name">Nenhum arquivo selecionado</span>
     </div>
     <div class="form-row-inline">
       <div class="form-row">
         <label for="seek-seconds">Posição no vídeo (segundos)</label>
-        <input type="number" id="seek-seconds" min="0" step="0.1" value="0">
+        <input type="number" id="seek-seconds" min="0" step="0.1" value="0"
+          {% if video_duration %}max="{{ video_duration }}"{% endif %}>
       </div>
       <div class="form-row">
         <label>&nbsp;</label>
-        <button type="button" class="btn btn-secondary" id="capture-frame" disabled>
+        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available %} disabled{% endif %}>
           Capturar frame
         </button>
       </div>
     </div>
   </div>
 
-  <div class="roi-status" id="roi-status">Selecione um arquivo de vídeo para começar.</div>
+  <div class="roi-status" id="roi-status">
+    {% if video_available %}
+      Carregando frame de {{ video_relpath }}…
+    {% else %}
+      Vídeo não encontrado em {{ video_relpath }}. Copie o MP4 ou faça upload.
+    {% endif %}
+  </div>
 
   <div class="roi-stage" id="roi-stage" hidden>
     <img id="frame-image" alt="Frame da câmera" draggable="false">
     <div class="roi-box" id="roi-box" hidden></div>
   </div>
-
-  <video id="source-video" playsinline hidden></video>
 
   <div class="roi-preview" id="roi-preview">
     ROI: x={{ camera.ocr_x }}, y={{ camera.ocr_y }},
@@ -55,6 +72,11 @@
   window.roiEditorConfig = {
     storeId: {{ store.id }},
     cameraId: {{ camera.id }},
+    cameraCode: {{ camera.camera_id | tojson }},
+    defaultVideoDate: {{ default_video_date | tojson }},
+    videoAvailable: {{ video_available | tojson }},
+    videoRelpath: {{ video_relpath | tojson }},
+    videoDuration: {{ video_duration | tojson if video_duration is not none else 'null' }},
     initialRoi: {
       x: {{ camera.ocr_x }},
       y: {{ camera.ocr_y }},
@@ -63,5 +85,5 @@
     },
   };
 </script>
-<script src="/static/roi_editor.js"></script>
+<script src="/static/roi_editor.js?v=4"></script>
 {% endblock %}

@@ -52,8 +52,9 @@ def create_app(settings_path: Path | str | None = None) -> FastAPI:
     @app.middleware("http")
     async def disable_html_cache(request: Request, call_next):
         response = await call_next(request)
+        path = request.url.path
         content_type = response.headers.get("content-type", "")
-        if content_type.startswith("text/html"):
+        if content_type.startswith("text/html") or path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"
         return response
 

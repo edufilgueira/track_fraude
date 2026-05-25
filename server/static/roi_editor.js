@@ -11,19 +11,17 @@
   const fileName = document.getElementById("video-file-name");
   const seekInput = document.getElementById("seek-seconds");
   const captureBtn = document.getElementById("capture-frame");
-  const sourceVideo = document.getElementById("source-video");
+  const videoDateInput = document.getElementById("video-date");
+  const loadFromStorageBtn = document.getElementById("load-from-storage");
 
   let frameSize = { width: 0, height: 0 };
   let currentRoi = { ...config.initialRoi };
   let dragStart = null;
   let dragging = false;
   let saveTimer = null;
-  let objectUrl = null;
   let imageObjectUrl = null;
-  let videoReady = false;
-  let useServerExtract = false;
+  let videoDuration = config.videoDuration || 0;
   let currentFile = null;
-  let videoDuration = 0;
 
   function setStatus(message, kind) {
     status.textContent = message;
@@ -181,11 +179,7 @@
     applyRoi(roi, true);
   }
 
-  function revokeObjectUrl() {
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl);
-      objectUrl = null;
-    }
+  function revokeImageObjectUrl() {
     if (imageObjectUrl) {
       URL.revokeObjectURL(imageObjectUrl);
       imageObjectUrl = null;
@@ -201,34 +195,76 @@
     return value;
   }
 
-  function applyFrameResponse(response) {
-    frameSize = {
-      width: Number(response.headers.get("X-Frame-Width") || 0),
-      height: Number(response.headers.get("X-Frame-Height") || 0),
-    };
-    const durationHeader = Number(response.headers.get("X-Video-Duration") || 0);
-    if (durationHeader > 0) {
-      videoDuration = durationHeader;
-      seekInput.max = String(Math.floor(videoDuration * 10) / 10);
-    }
-    return response.blob().then(function (blob) {
-      if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
-      imageObjectUrl = URL.createObjectURL(blob);
-      image.src = imageObjectUrl;
-      stage.hidden = false;
-      captureBtn.disabled = false;
-    });
+  function previewUrl(date, seconds) {
+    return (
+      "/stores/" + config.storeId + "/cameras/" + config.cameraId +
+      "/frame-preview?date=" + encodeURIComponent(date) +
+      "&seconds=" + encodeURIComponent(String(seconds)) +
+      "&_=" + Date.now()
+    );
   }
 
-  async function captureFrameFromServer() {
-    if (!currentFile) {
-      setStatus("Selecione um arquivo de vídeo.", "error");
+  function onFrameLoaded(label) {
+    frameSize = {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    };
+    if (!frameSize.width || !frameSize.height) {
+      setStatus("Frame inválido (0×0).", "error");
+      stage.hidden = true;
+      return;
+    }
+    stage.hidden = false;
+    captureBtn.disabled = false;
+    fileName.textContent = label;
+    applyRoi(currentRoi, false);
+    setStatus(
+      "Frame pronto. Arraste sobre o timestamp para definir o ROI (salva ao soltar).",
+      "info"
+    );
+  }
+
+  function loadFrameFromStorage() {
+    const date = (videoDateInput.value || "").trim();
+    if (!date) {
+      setStatus("Informe a data da gravação (YYYY-MM-DD).", "error");
       return;
     }
 
     const seconds = clampSeekSeconds(seekInput.value);
-    setStatus("Extraindo frame no servidor…", "pending");
+    const label = "data/raw/video/" + date + "/" + config.cameraCode + ".mp4";
+    setStatus("Carregando " + label + " …", "pending");
     roiBox.hidden = true;
+    currentFile = null;
+    revokeImageObjectUrl();
+
+    image.onload = function () {
+      image.onload = null;
+      image.onerror = null;
+      onFrameLoaded(label);
+    };
+    image.onerror = function () {
+      image.onload = null;
+      image.onerror = null;
+      stage.hidden = true;
+      setStatus(
+        "Não foi possível carregar o frame. Confira se existe " + label,
+        "error"
+      );
+    };
+    image.src = previewUrl(date, seconds);
+  }
+
+  async function loadFrameFromUpload() {
+    if (!currentFile) {
+      loadFrameFromStorage();
+      return;
+    }
+
+    const seconds = clampSeekSeconds(seekInput.value);
+    setStatus("Extraindo frame no servidor (upload)…", "pending");
+    roiBox.hidden = true;
+    revokeImageObjectUrl();
 
     const formData = new FormData();
     formData.append("video", currentFile);
@@ -244,130 +280,50 @@
         try {
           detail = JSON.parse(detail).detail || detail;
         } catch (_err) {
-          /* resposta plain text */
+          /* plain text */
         }
         throw new Error(detail || "Falha ao extrair frame");
       }
-      await applyFrameResponse(response);
-      if (useServerExtract) {
-        setStatus(
-          "Frame extraído no servidor (codec não reproduzível no navegador). Arraste para definir o ROI.",
-          "info"
-        );
+
+      const durationHeader = Number(response.headers.get("X-Video-Duration") || 0);
+      if (durationHeader > 0) {
+        videoDuration = durationHeader;
+        seekInput.max = String(Math.floor(videoDuration * 10) / 10);
       }
+
+      const blob = await response.blob();
+      imageObjectUrl = URL.createObjectURL(blob);
+      image.onload = function () {
+        image.onload = null;
+        image.onerror = null;
+        onFrameLoaded(currentFile.name);
+      };
+      image.onerror = function () {
+        image.onload = null;
+        image.onerror = null;
+        setStatus("Falha ao exibir frame extraído.", "error");
+      };
+      image.src = imageObjectUrl;
     } catch (error) {
       setStatus("Erro ao extrair frame: " + error.message, "error");
     }
   }
 
-  function captureFrameFromBrowser() {
-    if (!videoReady || !sourceVideo.videoWidth) {
-      setStatus("Selecione um vídeo válido primeiro.", "error");
-      return;
-    }
-
-    const seconds = clampSeekSeconds(seekInput.value);
-    setStatus("Capturando frame…", "pending");
-    roiBox.hidden = true;
-
-    const seekAndCapture = function () {
-      const canvas = document.createElement("canvas");
-      canvas.width = sourceVideo.videoWidth;
-      canvas.height = sourceVideo.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        setStatus("Seu navegador não suporta captura de frame.", "error");
-        return;
-      }
-      ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
-      frameSize = { width: canvas.width, height: canvas.height };
-      image.src = canvas.toDataURL("image/jpeg", 0.92);
-      stage.hidden = false;
-    };
-
-    if (Math.abs(sourceVideo.currentTime - seconds) < 0.05) {
-      seekAndCapture();
-      return;
-    }
-
-    sourceVideo.onseeked = function () {
-      sourceVideo.onseeked = null;
-      seekAndCapture();
-    };
-    sourceVideo.currentTime = seconds;
-  }
-
   function captureFrame() {
-    if (useServerExtract) {
-      captureFrameFromServer();
+    if (currentFile) {
+      loadFrameFromUpload();
     } else {
-      captureFrameFromBrowser();
+      loadFrameFromStorage();
     }
-  }
-
-  function startServerExtract() {
-    useServerExtract = true;
-    videoReady = true;
-    captureBtn.disabled = false;
-    seekInput.value = "0";
-    captureFrameFromServer();
-  }
-
-  function tryBrowserDecode(file) {
-    useServerExtract = false;
-    videoReady = false;
-    videoDuration = 0;
-    captureBtn.disabled = true;
-    stage.hidden = true;
-    frameSize = { width: 0, height: 0 };
-
-    revokeObjectUrl();
-    objectUrl = URL.createObjectURL(file);
-    sourceVideo.onloadedmetadata = null;
-    sourceVideo.onerror = null;
-
-    sourceVideo.onloadedmetadata = function () {
-      if (!sourceVideo.videoWidth || !sourceVideo.videoHeight) {
-        startServerExtract();
-        return;
-      }
-      videoReady = true;
-      captureBtn.disabled = false;
-      videoDuration = Number.isFinite(sourceVideo.duration) ? sourceVideo.duration : 0;
-      if (videoDuration > 0) {
-        seekInput.max = String(Math.floor(videoDuration * 10) / 10);
-      }
-      setStatus("Vídeo carregado no navegador. Capturando frame inicial…", "info");
-      seekInput.value = "0";
-      captureFrameFromBrowser();
-    };
-
-    sourceVideo.onerror = function () {
-      startServerExtract();
-    };
-
-    sourceVideo.src = objectUrl;
-    sourceVideo.load();
   }
 
   function loadSelectedFile(file) {
     if (!file) return;
-
     currentFile = file;
-    fileName.textContent = file.name + " (" + Math.round(file.size / (1024 * 1024)) + " MB)";
-    setStatus("Carregando vídeo…", "pending");
-    tryBrowserDecode(file);
+    captureBtn.disabled = false;
+    seekInput.value = "0";
+    loadFrameFromUpload();
   }
-
-  image.addEventListener("load", function () {
-    applyRoi(currentRoi, false);
-    if (!useServerExtract) {
-      setStatus(
-        "Frame pronto. Arraste sobre o timestamp para definir o ROI (salva ao soltar).",
-        "info"
-      );
-    }
-  });
 
   stage.addEventListener("pointerdown", onPointerDown);
   stage.addEventListener("pointermove", onPointerMove);
@@ -383,10 +339,28 @@
     if (file) loadSelectedFile(file);
   });
 
+  loadFromStorageBtn.addEventListener("click", loadFrameFromStorage);
   captureBtn.addEventListener("click", captureFrame);
   seekInput.addEventListener("change", captureFrame);
   window.addEventListener("resize", function () {
     renderRoiBox(currentRoi);
   });
-  window.addEventListener("beforeunload", revokeObjectUrl);
+  window.addEventListener("beforeunload", revokeImageObjectUrl);
+
+  if (videoDateInput && config.defaultVideoDate) {
+    videoDateInput.value = config.defaultVideoDate;
+  }
+  if (videoDuration > 0) {
+    seekInput.max = String(Math.floor(videoDuration * 10) / 10);
+  }
+
+  if (config.videoAvailable) {
+    captureBtn.disabled = false;
+    loadFrameFromStorage();
+  } else if (config.videoRelpath) {
+    setStatus(
+      "Vídeo não encontrado: " + config.videoRelpath + ". Copie o MP4 ou use upload.",
+      "error"
+    );
+  }
 })();

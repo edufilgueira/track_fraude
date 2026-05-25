@@ -25,13 +25,7 @@ from track_fraude.storage import (
     processed_root,
 )
 from track_fraude.sync import build_sync_map, save_sync_map
-
-
-def resolve_video_path(date: str, camera_id: str, video: str | None) -> Path:
-    if video:
-        return Path(video)
-    default = ROOT / "data" / "raw" / "video" / date / f"{camera_id}_test.mp4"
-    return default
+from track_fraude.video_paths import resolve_video_path
 
 
 def main() -> None:
@@ -46,7 +40,9 @@ def main() -> None:
     validate_camera_in_config(config, args.camera)
     camera_ids = camera_ids_from_config(config)
     scope = ProcessedScope.from_config(processed_root(ROOT), config)
-    video_path = resolve_video_path(args.date, args.camera, args.video)
+    video_path = resolve_video_path(
+        ROOT, date=args.date, camera_id=args.camera, video=args.video
+    )
 
     if not video_path.exists():
         raise FileNotFoundError(

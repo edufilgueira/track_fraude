@@ -46,7 +46,10 @@ class ProcessedScope(StoreScope):
         return self.date_dir(date) / camera_id / "sync_map.json"
 
     def tracks_path(self, date: str, camera_id: str) -> Path:
-        return self.date_dir(date) / camera_id / "tracks.json"
+        return self.date_dir(date) / camera_id / "tracks.parquet"
+
+    def manifest_path(self, date: str, camera_id: str) -> Path:
+        return self.date_dir(date) / camera_id / "manifest.json"
 
 
 @dataclass(frozen=True)

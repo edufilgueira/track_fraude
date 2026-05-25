@@ -7,9 +7,13 @@ from datetime import datetime
 import cv2
 import numpy as np
 
-# Espaço opcional entre data e hora (OCR frequentemente cola ano + hora).
+# DD/MM/YYYY (espaço opcional antes da hora)
 TIMESTAMP_PATTERN = re.compile(
     r"(\d{2})[/.-](\d{2})[/.-](\d{4})\s*(\d{2}):(\d{2}):(\d{2})"
+)
+# YYYY-MM-DD (comum em OSD de DVR/NVR)
+ISO_TIMESTAMP_PATTERN = re.compile(
+    r"(\d{4})[/.-](\d{2})[/.-](\d{2})\s*(\d{2}):(\d{2}):(\d{2})"
 )
 
 TESSERACT_INSTALL_HINT = (
@@ -51,21 +55,24 @@ def preprocess_roi(roi: np.ndarray) -> np.ndarray:
 def normalize_ocr_timestamp_text(text: str) -> str:
     """Corrige leituras comuns do Tesseract antes do parse."""
     cleaned = text.replace("\n", " ").strip()
-    # Ano colado na hora: 202606:16:30 -> 2026 06:16:30
+    # DD/MM/YYYY colado na hora: 202606:16:30 -> 2026 06:16:30
     cleaned = re.sub(
         r"(\d{2}[/.-]\d{2}[/.-]\d{4})(\d{2}:\d{2}:\d{2})",
+        r"\1 \2",
+        cleaned,
+    )
+    # YYYY-MM-DD colado na hora: 2026-05-2514:41:56 -> 2026-05-25 14:41:56
+    cleaned = re.sub(
+        r"(\d{4}-\d{2}-\d{2})(\d{2}:\d{2}:\d{2})",
         r"\1 \2",
         cleaned,
     )
     return cleaned
 
 
-def parse_timestamp_text(text: str) -> datetime | None:
-    cleaned = normalize_ocr_timestamp_text(text)
-    match = TIMESTAMP_PATTERN.search(cleaned)
-    if not match:
-        return None
-    day, month, year, hour, minute, second = match.groups()
+def _datetime_from_parts(
+    year: str, month: str, day: str, hour: str, minute: str, second: str
+) -> datetime | None:
     try:
         return datetime(
             int(year),
@@ -77,6 +84,21 @@ def parse_timestamp_text(text: str) -> datetime | None:
         )
     except ValueError:
         return None
+
+
+def parse_timestamp_text(text: str) -> datetime | None:
+    cleaned = normalize_ocr_timestamp_text(text)
+
+    iso_match = ISO_TIMESTAMP_PATTERN.search(cleaned)
+    if iso_match:
+        year, month, day, hour, minute, second = iso_match.groups()
+        return _datetime_from_parts(year, month, day, hour, minute, second)
+
+    match = TIMESTAMP_PATTERN.search(cleaned)
+    if not match:
+        return None
+    day, month, year, hour, minute, second = match.groups()
+    return _datetime_from_parts(year, month, day, hour, minute, second)
 
 
 def extract_timestamp_from_frame(
