@@ -4,8 +4,7 @@
 <div class="card">
   <h2>{% if camera %}Editar câmera{% else %}Cadastrar câmera{% endif %} — {{ store.name }}</h2>
   <p class="hint">
-    Configure a região (ROI) onde o timestamp aparece no vídeo.
-    Valores em pixels a partir do canto superior esquerdo do frame.
+    Configure o tipo da câmera, a região (ROI) do timestamp e — quando aplicável — polígonos de zona no vídeo.
   </p>
   <form method="post" action="{{ action }}" class="form-grid" id="camera-form">
     <div class="form-row">
@@ -14,10 +13,22 @@
              value="{{ camera.camera_id if camera else '' }}" placeholder="cam1 ou cam2">
     </div>
     <div class="form-row">
+      <label for="camera_role">Tipo da câmera</label>
+      <select id="camera_role" name="camera_role">
+        {% for role, label in role_labels.items() %}
+        <option value="{{ role }}"
+          {% if camera and camera.camera_role == role %}selected{% elif not camera and role == default_role %}selected{% endif %}>
+          {{ label }}
+        </option>
+        {% endfor %}
+      </select>
+      <span class="hint" id="role-hint"></span>
+    </div>
+    <div class="form-row">
       <label for="description">Descrição</label>
       <input id="description" name="description" maxlength="200"
              value="{{ camera.description if camera else '' }}"
-             placeholder="Entrada / Self-checkout">
+             placeholder="Porta principal / Self-checkout">
     </div>
     <div class="form-row">
       <label>OCR ROI — retângulo do timestamp</label>
@@ -46,9 +57,13 @@
     </div>
     <div class="roi-preview" id="roi-preview"></div>
     {% if camera %}
-    <div class="actions" style="margin-top: 0; margin-bottom: 12px;">
+    <div class="actions zone-actions" style="margin-top: 0; margin-bottom: 12px;">
       <a class="btn" href="/stores/{{ store.id }}/cameras/{{ camera.id }}/roi-editor">
         Selecionar ROI no vídeo
+      </a>
+      <a class="btn" id="zone-editor-btn" hidden
+         href="/stores/{{ store.id }}/cameras/{{ camera.id }}/zone-editor">
+        Definir zona no vídeo
       </a>
     </div>
     {% endif %}
@@ -73,5 +88,27 @@
     document.getElementById(id).addEventListener('input', updatePreview);
   });
   updatePreview();
+
+  const roleHints = {
+    entrance: 'Porta única: polígono portal (entrada/saída alternadas).',
+    checkout: 'Desenhe um polígono por lane de self-checkout.',
+    support: 'Sem zona de porta — use só para evidência / OCR.',
+  };
+  const roleSelect = document.getElementById('camera_role');
+  const roleHint = document.getElementById('role-hint');
+  const zoneBtn = document.getElementById('zone-editor-btn');
+
+  function syncRoleUi() {
+    const role = roleSelect.value;
+    roleHint.textContent = roleHints[role] || '';
+    if (zoneBtn) {
+      zoneBtn.hidden = role === 'support';
+      zoneBtn.textContent = role === 'checkout'
+        ? 'Definir polígonos do caixa'
+        : 'Definir polígono da porta';
+    }
+  }
+  roleSelect.addEventListener('change', syncRoleUi);
+  syncRoleUi();
 </script>
 {% endblock %}

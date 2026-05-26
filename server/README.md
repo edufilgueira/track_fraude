@@ -51,7 +51,7 @@ Acesse: http://127.0.0.1:8080/login
 pip install -e ./core
 pip install -e ./server
 pip install -e ".[dev]"
-pytest tests/test_stores_admin.py
+pytest tests/test_zone_editor.py tests/test_db_migration.py
 ```
 
 ## Arquitetura

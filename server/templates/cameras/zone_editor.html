@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Zonas — {{ camera.camera_id }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Polígonos de zona — {{ camera.camera_id }}</h2>
+  <p class="hint">
+    Tipo: <strong>{{ role_label }}</strong> ·
+    Vídeo: <code>{{ video_relpath }}</code> ·
+    Loja: <strong>{{ store.name }}</strong>
+  </p>
+
+  <div class="roi-controls form-grid">
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label for="video-date">Data da gravação</label>
+        <input type="date" id="video-date" value="{{ default_video_date }}">
+      </div>
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <button type="button" class="btn" id="load-from-storage">
+          Carregar {{ camera.camera_id }}.mp4
+        </button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="video-file">Ou escolha um arquivo local (upload)</label>
+      <input type="file" id="video-file" accept="video/*,.mp4,.avi,.mkv,.mov,.webm">
+      <span class="hint" id="video-file-name">Nenhum arquivo selecionado</span>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label for="seek-seconds">Posição no vídeo (segundos)</label>
+        <input type="number" id="seek-seconds" min="0" step="0.1" value="0"
+          {% if video_duration %}max="{{ video_duration }}"{% endif %}>
+      </div>
+      {% if camera.camera_role == 'checkout' %}
+      <div class="form-row">
+        <label for="r1-min-duration-sec">Tempo mínimo no caixa — R1 (segundos)</label>
+        <input type="number" id="r1-min-duration-sec" min="1" max="3600" step="1"
+          value="{{ store.r1_min_checkout_duration_sec | int }}">
+      </div>
+      {% endif %}
+      <div class="form-row">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available %} disabled{% endif %}>
+          Capturar frame
+        </button>
+      </div>
+    </div>
+
+    {% if camera.camera_role == 'checkout' %}
+    <div class="zone-lanes-panel">
+      <div class="zone-lanes-header">
+        <span class="zone-lanes-title">Caixas (lanes)</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="add-lane">+ Adicionar caixa</button>
+      </div>
+      <div class="zone-lane-tabs" id="lane-tabs" role="tablist" aria-label="Caixas"></div>
+      <div class="form-row-inline">
+        <div class="form-row">
+          <label for="zone-label">Rótulo do caixa ativo</label>
+          <input type="text" id="zone-label" maxlength="80" placeholder="Caixa 1">
+        </div>
+        <div class="form-row">
+          <label>&nbsp;</label>
+          <button type="button" class="btn btn-secondary" id="delete-lane">Excluir caixa selecionado</button>
+        </div>
+      </div>
+      <p class="hint">
+        Selecione um caixa, marque o polígono na imagem (≥ 3 pontos) e salve.
+        Repita para lane 2, 3 ou mais. Cada caixa aparece com cor diferente.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="zone-toolbar actions" style="margin-top: 0;">
+    <button type="button" class="btn btn-secondary" id="undo-point">Desfazer ponto</button>
+    <button type="button" class="btn btn-secondary" id="clear-draft">Limpar rascunho</button>
+    <button type="button" class="btn" id="save-polygon">Salvar polígono</button>
+    {% if camera.camera_role == 'entrance' %}
+    <button type="button" class="btn btn-secondary" id="set-entry-vector">Definir sentido de entrada</button>
+    {% endif %}
+  </div>
+
+  <div class="roi-status" id="zone-status">
+    {% if video_available %}
+      Carregando frame…
+    {% else %}
+      Vídeo não encontrado em {{ video_relpath }}. Copie o MP4 ou faça upload.
+    {% endif %}
+  </div>
+
+  <div class="roi-stage zone-stage" id="zone-stage" hidden>
+    <div class="zone-frame-wrap" id="zone-frame-wrap">
+      <img id="frame-image" alt="Frame da câmera" draggable="false">
+      <svg id="zone-overlay" class="zone-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <div class="roi-preview" id="zone-preview">Nenhum polígono salvo.</div>
+
+  <div class="actions" style="margin-top:16px">
+    <a class="btn btn-secondary" href="/stores/{{ store.id }}/cameras/{{ camera.id }}/edit">Voltar ao formulário</a>
+    <a class="btn btn-secondary" href="/stores/{{ store.id }}">Detalhe da loja</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.zoneEditorConfig = {
+    storeId: {{ store.id }},
+    cameraDbId: {{ camera.id }},
+    cameraCode: {{ camera.camera_id | tojson }},
+    cameraRole: {{ camera.camera_role | tojson }},
+    roleLabel: {{ role_label | tojson }},
+    defaultVideoDate: {{ default_video_date | tojson }},
+    videoAvailable: {{ video_available | tojson }},
+    videoRelpath: {{ video_relpath | tojson }},
+    videoDuration: {{ video_duration | tojson if video_duration is not none else 'null' }},
+    existingZones: {{ existing_zones | tojson }},
+    r1MinCheckoutDurationSec: {{ store.r1_min_checkout_duration_sec }},
+  };
+</script>
+<script src="/static/zone_editor.js?v=5"></script>
+{% endblock %}

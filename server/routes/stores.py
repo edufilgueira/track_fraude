@@ -4,6 +4,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from server.dependencies import get_group_repo, get_store_repo, get_templates
+from track_fraude_core.db.camera_roles import CAMERA_ROLE_LABELS, CAMERA_ROLE_SUPPORT
 
 router = APIRouter(prefix="/stores", tags=["stores"])
 
@@ -35,6 +36,7 @@ async def store_detail(request: Request, store_db_id: int) -> HTMLResponse:
             "store": store,
             "group": group,
             "cameras": cameras,
+            "role_labels": CAMERA_ROLE_LABELS,
             "message": request.query_params.get("msg"),
         },
     )
@@ -135,7 +137,13 @@ async def new_camera_form(request: Request, store_db_id: int) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "cameras/form.html",
-        {"store": store, "camera": None, "action": f"/stores/{store_db_id}/cameras"},
+        {
+            "store": store,
+            "camera": None,
+            "action": f"/stores/{store_db_id}/cameras",
+            "role_labels": CAMERA_ROLE_LABELS,
+            "default_role": CAMERA_ROLE_SUPPORT,
+        },
     )
 
 
@@ -144,6 +152,7 @@ async def create_camera(
     store_db_id: int,
     camera_id: str = Form(...),
     description: str = Form(""),
+    camera_role: str = Form(CAMERA_ROLE_SUPPORT),
     ocr_x: int = Form(10),
     ocr_y: int = Form(10),
     ocr_width: int = Form(420),
@@ -157,6 +166,7 @@ async def create_camera(
         store_db_id=store_db_id,
         camera_id=camera_id,
         description=description,
+        camera_role=camera_role,
         ocr_x=ocr_x,
         ocr_y=ocr_y,
         ocr_width=ocr_width,
@@ -187,6 +197,8 @@ async def edit_camera_form(
             "store": store,
             "camera": camera,
             "action": f"/stores/{store_db_id}/cameras/{camera_db_id}/edit",
+            "role_labels": CAMERA_ROLE_LABELS,
+            "default_role": CAMERA_ROLE_SUPPORT,
         },
     )
 
@@ -197,6 +209,7 @@ async def update_camera(
     camera_db_id: int,
     camera_id: str = Form(...),
     description: str = Form(""),
+    camera_role: str = Form(CAMERA_ROLE_SUPPORT),
     ocr_x: int = Form(10),
     ocr_y: int = Form(10),
     ocr_width: int = Form(420),
@@ -210,6 +223,7 @@ async def update_camera(
         camera_db_id,
         camera_id=camera_id.strip(),
         description=description.strip(),
+        camera_role=camera_role,
         ocr_x=ocr_x,
         ocr_y=ocr_y,
         ocr_width=ocr_width,

@@ -33,6 +33,7 @@
     <thead>
       <tr>
         <th>ID</th>
+        <th>Tipo</th>
         <th>Descrição</th>
         <th>OCR ROI (x, y, w, h)</th>
         <th>Ações</th>
@@ -42,6 +43,7 @@
       {% for cam in cameras %}
       <tr>
         <td><strong>{{ cam.camera_id }}</strong></td>
+        <td>{{ role_labels.get(cam.camera_role, cam.camera_role) }}</td>
         <td>{{ cam.description or '—' }}</td>
         <td>
           <code>{{ cam.ocr_x }}, {{ cam.ocr_y }}, {{ cam.ocr_width }}, {{ cam.ocr_height }}</code>
@@ -49,6 +51,10 @@
         <td class="actions">
           <a class="btn btn-secondary"
              href="/stores/{{ store.id }}/cameras/{{ cam.id }}/roi-editor">Editar ROI</a>
+          {% if cam.camera_role in ('entrance', 'checkout') %}
+          <a class="btn btn-secondary"
+             href="/stores/{{ store.id }}/cameras/{{ cam.id }}/zone-editor">Zonas</a>
+          {% endif %}
           <a class="btn btn-secondary"
              href="/stores/{{ store.id }}/cameras/{{ cam.id }}/edit">Editar</a>
           <form method="post"

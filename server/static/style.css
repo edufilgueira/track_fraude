@@ -353,3 +353,138 @@ footer {
   background: rgba(59, 130, 246, 0.18);
   pointer-events: none;
 }
+
+.zone-stage {
+  cursor: crosshair;
+  background: transparent;
+}
+
+.zone-frame-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.zone-frame-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.zone-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.zone-overlay .zone-draft-line {
+  stroke: #60a5fa;
+  stroke-width: 3;
+  fill: none;
+}
+
+.zone-overlay .zone-draft-fill {
+  fill: rgba(59, 130, 246, 0.2);
+  stroke: #60a5fa;
+  stroke-width: 2;
+}
+
+.zone-overlay .zone-saved-fill {
+  stroke-width: 3;
+}
+
+.zone-overlay .zone-dot {
+  fill: #60a5fa;
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.zone-overlay .zone-dot-label {
+  fill: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #1a2332;
+  stroke-width: 3px;
+}
+
+.zone-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zone-lanes-panel {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.zone-lanes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.zone-lanes-title {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
+.zone-lane-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.zone-lane-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  background: #1e293b;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.zone-lane-tab:hover {
+  border-color: #60a5fa;
+  color: #f8fafc;
+}
+
+.zone-lane-tab.is-active {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.2);
+  color: #f8fafc;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.zone-lane-tab .lane-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.zone-lane-tab .lane-unsaved {
+  opacity: 0.75;
+  font-size: 0.8rem;
+}
