@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS stores (
     ocr_sample_interval_sec INTEGER NOT NULL DEFAULT 30,
     ocr_min_confidence REAL NOT NULL DEFAULT 0.5,
     pos_match_delta_sec INTEGER NOT NULL DEFAULT 60,
+    r1_min_checkout_duration_sec REAL NOT NULL DEFAULT 60,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -59,6 +60,22 @@ CREATE TABLE IF NOT EXISTS users (
     display_name TEXT NOT NULL DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS camera_zones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    camera_db_id INTEGER NOT NULL,
+    zone_type TEXT NOT NULL,
+    zone_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    lane_id INTEGER,
+    polygon_json TEXT NOT NULL,
+    entry_vector_json TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (camera_db_id) REFERENCES cameras(id) ON DELETE CASCADE,
+    UNIQUE (camera_db_id, zone_id)
 );
 """
 
@@ -150,6 +167,62 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
         (default_group_id,),
     )
 
+    store_columns = _column_names(conn, "stores")
+    if "r1_min_checkout_duration_sec" not in store_columns:
+        conn.execute(
+            "ALTER TABLE stores ADD COLUMN r1_min_checkout_duration_sec "
+            "REAL NOT NULL DEFAULT 60"
+        )
+
+
+def _migrate_cameras_and_zones(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, "cameras"):
+        return
+
+    camera_columns = _column_names(conn, "cameras")
+    if "camera_role" not in camera_columns:
+        conn.execute(
+            "ALTER TABLE cameras ADD COLUMN camera_role TEXT NOT NULL DEFAULT 'support'"
+        )
+
+    from track_fraude_core.db.camera_roles import infer_camera_role
+
+    rows = conn.execute(
+        "SELECT id, camera_id, description, camera_role FROM cameras"
+    ).fetchall()
+    for row in rows:
+        if str(row["camera_role"] or "support") != "support":
+            continue
+        role = infer_camera_role(
+            camera_id=str(row["camera_id"]),
+            description=str(row["description"] or ""),
+        )
+        conn.execute(
+            "UPDATE cameras SET camera_role = ? WHERE id = ?",
+            (role, int(row["id"])),
+        )
+
+    if not _table_exists(conn, "camera_zones"):
+        conn.executescript(
+            """
+            CREATE TABLE camera_zones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                camera_db_id INTEGER NOT NULL,
+                zone_type TEXT NOT NULL,
+                zone_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                lane_id INTEGER,
+                polygon_json TEXT NOT NULL,
+                entry_vector_json TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (camera_db_id) REFERENCES cameras(id) ON DELETE CASCADE,
+                UNIQUE (camera_db_id, zone_id)
+            );
+            """
+        )
+
 
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     if _table_exists(conn, "stores"):
@@ -168,6 +241,10 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cameras_store ON cameras(store_db_id)"
         )
+    if _table_exists(conn, "camera_zones"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_camera_zones_camera ON camera_zones(camera_db_id)"
+        )
 
 
 def init_database(db_path: Path | str | None = None) -> Path:
@@ -175,6 +252,7 @@ def init_database(db_path: Path | str | None = None) -> Path:
     with get_connection(path) as conn:
         conn.executescript(SCHEMA)
         _migrate_legacy_schema(conn)
+        _migrate_cameras_and_zones(conn)
         _ensure_indexes(conn)
         conn.commit()
     return path

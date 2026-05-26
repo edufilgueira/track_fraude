@@ -64,7 +64,11 @@ class FilePipelineStateRepository(PipelineStateRepository):
                 "evidence": {"status": "pending"},
             },
             "cameras": {
-                camera_id: {"sync": "pending", "track": "pending"}
+                camera_id: {
+                    "sync": "pending",
+                    "track": "pending",
+                    "events": "pending",
+                }
                 for camera_id in sorted(camera_ids)
             },
         }
@@ -76,7 +80,13 @@ class FilePipelineStateRepository(PipelineStateRepository):
         cameras = state.setdefault("cameras", {})
         for camera_id in camera_ids:
             if camera_id not in cameras:
-                cameras[camera_id] = {"sync": "pending", "track": "pending"}
+                cameras[camera_id] = {
+                    "sync": "pending",
+                    "track": "pending",
+                    "events": "pending",
+                }
+            else:
+                cameras[camera_id].setdefault("events", "pending")
         return state
 
     def load(self, date: str) -> dict[str, Any]:

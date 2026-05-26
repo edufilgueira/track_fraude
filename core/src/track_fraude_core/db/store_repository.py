@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from track_fraude_core.db.camera_roles import (
+    CAMERA_ROLE_SUPPORT,
+    infer_camera_role,
+    normalize_camera_role,
+)
 from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
 
 
@@ -23,6 +29,7 @@ class StoreRecord:
     ocr_sample_interval_sec: int
     ocr_min_confidence: float
     pos_match_delta_sec: int
+    r1_min_checkout_duration_sec: float
     active: bool
 
 
@@ -32,10 +39,36 @@ class CameraRecord:
     store_db_id: int
     camera_id: str
     description: str
+    camera_role: str
     ocr_x: int
     ocr_y: int
     ocr_width: int
     ocr_height: int
+
+
+@dataclass
+class CameraZoneRecord:
+    id: int
+    camera_db_id: int
+    zone_type: str
+    zone_id: str
+    label: str
+    lane_id: int | None
+    polygon: list[list[float]]
+    entry_vector: list[float] | None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "zone_id": self.zone_id,
+            "zone_type": self.zone_type,
+            "label": self.label,
+            "polygon": self.polygon,
+        }
+        if self.lane_id is not None:
+            payload["lane_id"] = self.lane_id
+        if self.entry_vector is not None:
+            payload["entry_vector"] = self.entry_vector
+        return payload
 
 
 class StoreRepository:
@@ -63,20 +96,44 @@ class StoreRepository:
             ocr_sample_interval_sec=int(row["ocr_sample_interval_sec"]),
             ocr_min_confidence=float(row["ocr_min_confidence"]),
             pos_match_delta_sec=int(row["pos_match_delta_sec"]),
+            r1_min_checkout_duration_sec=float(row["r1_min_checkout_duration_sec"]),
             active=bool(row["active"]),
         )
 
     @staticmethod
     def _camera_from_row(row: Any) -> CameraRecord:
+        role = str(row["camera_role"] if "camera_role" in row.keys() else CAMERA_ROLE_SUPPORT)
         return CameraRecord(
             id=int(row["id"]),
             store_db_id=int(row["store_db_id"]),
             camera_id=str(row["camera_id"]),
             description=str(row["description"] or ""),
+            camera_role=role,
             ocr_x=int(row["ocr_x"]),
             ocr_y=int(row["ocr_y"]),
             ocr_width=int(row["ocr_width"]),
             ocr_height=int(row["ocr_height"]),
+        )
+
+    @staticmethod
+    def _zone_from_row(row: Any) -> CameraZoneRecord:
+        polygon = json.loads(str(row["polygon_json"]))
+        entry_vector_raw = row["entry_vector_json"]
+        entry_vector = (
+            json.loads(str(entry_vector_raw))
+            if entry_vector_raw not in (None, "")
+            else None
+        )
+        lane_id = row["lane_id"]
+        return CameraZoneRecord(
+            id=int(row["id"]),
+            camera_db_id=int(row["camera_db_id"]),
+            zone_type=str(row["zone_type"]),
+            zone_id=str(row["zone_id"]),
+            label=str(row["label"] or ""),
+            lane_id=int(lane_id) if lane_id is not None else None,
+            polygon=[[float(x), float(y)] for x, y in polygon],
+            entry_vector=[float(v) for v in entry_vector] if entry_vector else None,
         )
 
     def list_stores(
@@ -149,6 +206,7 @@ class StoreRepository:
         ocr_sample_interval_sec: int = 30,
         ocr_min_confidence: float = 0.5,
         pos_match_delta_sec: int = 60,
+        r1_min_checkout_duration_sec: float = 60.0,
         active: bool = True,
     ) -> StoreRecord:
         with self._conn() as conn:
@@ -158,8 +216,8 @@ class StoreRepository:
                     group_db_id, store_id, name,
                     street, number, neighborhood, city, state, cep,
                     timezone, ocr_sample_interval_sec, ocr_min_confidence,
-                    pos_match_delta_sec, active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pos_match_delta_sec, r1_min_checkout_duration_sec, active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     group_db_id,
@@ -175,6 +233,7 @@ class StoreRepository:
                     ocr_sample_interval_sec,
                     ocr_min_confidence,
                     pos_match_delta_sec,
+                    float(r1_min_checkout_duration_sec),
                     1 if active else 0,
                 ),
             )
@@ -199,6 +258,7 @@ class StoreRepository:
             "ocr_sample_interval_sec",
             "ocr_min_confidence",
             "pos_match_delta_sec",
+            "r1_min_checkout_duration_sec",
             "active",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -249,23 +309,29 @@ class StoreRepository:
         store_db_id: int,
         camera_id: str,
         description: str = "",
+        camera_role: str | None = None,
         ocr_x: int = 10,
         ocr_y: int = 10,
         ocr_width: int = 420,
         ocr_height: int = 50,
     ) -> CameraRecord:
+        role = normalize_camera_role(
+            camera_role
+            or infer_camera_role(camera_id=camera_id.strip(), description=description)
+        )
         with self._conn() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO cameras (
-                    store_db_id, camera_id, description,
+                    store_db_id, camera_id, description, camera_role,
                     ocr_x, ocr_y, ocr_width, ocr_height
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     store_db_id,
                     camera_id.strip(),
                     description.strip(),
+                    role,
                     ocr_x,
                     ocr_y,
                     ocr_width,
@@ -282,6 +348,7 @@ class StoreRepository:
         allowed = {
             "camera_id",
             "description",
+            "camera_role",
             "ocr_x",
             "ocr_y",
             "ocr_width",
@@ -290,6 +357,13 @@ class StoreRepository:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return self.get_camera(camera_db_id)
+
+        if "camera_role" in updates:
+            updates["camera_role"] = normalize_camera_role(str(updates["camera_role"]))
+        if "camera_id" in updates:
+            updates["camera_id"] = str(updates["camera_id"]).strip()
+        if "description" in updates:
+            updates["description"] = str(updates["description"]).strip()
 
         columns = ", ".join(f"{key} = ?" for key in updates)
         values = list(updates.values()) + [camera_db_id]
@@ -306,6 +380,146 @@ class StoreRepository:
             conn.execute("DELETE FROM cameras WHERE id = ?", (camera_db_id,))
             conn.commit()
 
+    def list_camera_zones(self, camera_db_id: int) -> list[CameraZoneRecord]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM camera_zones
+                WHERE camera_db_id = ?
+                ORDER BY sort_order, zone_id
+                """,
+                (camera_db_id,),
+            ).fetchall()
+        return [self._zone_from_row(row) for row in rows]
+
+    def get_camera_zone(self, zone_db_id: int) -> CameraZoneRecord | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM camera_zones WHERE id = ?",
+                (zone_db_id,),
+            ).fetchone()
+        return self._zone_from_row(row) if row else None
+
+    def save_camera_zone(
+        self,
+        *,
+        camera_db_id: int,
+        zone_type: str,
+        zone_id: str,
+        polygon: list[list[float]],
+        label: str = "",
+        lane_id: int | None = None,
+        entry_vector: list[float] | None = None,
+        sort_order: int = 0,
+    ) -> CameraZoneRecord:
+        if len(polygon) < 3:
+            raise ValueError("Polígono precisa de pelo menos 3 pontos")
+
+        payload_polygon = json.dumps(
+            [[float(x), float(y)] for x, y in polygon],
+            ensure_ascii=False,
+        )
+        payload_vector = (
+            json.dumps([float(entry_vector[0]), float(entry_vector[1])])
+            if entry_vector is not None
+            else None
+        )
+
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO camera_zones (
+                    camera_db_id, zone_type, zone_id, label, lane_id,
+                    polygon_json, entry_vector_json, sort_order
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(camera_db_id, zone_id) DO UPDATE SET
+                    zone_type = excluded.zone_type,
+                    label = excluded.label,
+                    lane_id = excluded.lane_id,
+                    polygon_json = excluded.polygon_json,
+                    entry_vector_json = excluded.entry_vector_json,
+                    sort_order = excluded.sort_order,
+                    updated_at = datetime('now')
+                """,
+                (
+                    camera_db_id,
+                    zone_type.strip(),
+                    zone_id.strip(),
+                    label.strip(),
+                    lane_id,
+                    payload_polygon,
+                    payload_vector,
+                    sort_order,
+                ),
+            )
+            conn.commit()
+            row = conn.execute(
+                """
+                SELECT * FROM camera_zones
+                WHERE camera_db_id = ? AND zone_id = ?
+                """,
+                (camera_db_id, zone_id.strip()),
+            ).fetchone()
+        assert row is not None
+        return self._zone_from_row(row)
+
+    def delete_camera_zone(self, camera_db_id: int, zone_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "DELETE FROM camera_zones WHERE camera_db_id = ? AND zone_id = ?",
+                (camera_db_id, zone_id.strip()),
+            )
+            conn.commit()
+
+    def build_zones_payload(
+        self,
+        store: StoreRecord,
+        *,
+        group_code: str,
+        hysteresis_sec: float = 3.0,
+    ) -> dict[str, Any]:
+        cameras_payload: dict[str, Any] = {}
+        for camera in self.list_cameras(store.id):
+            zones = self.list_camera_zones(camera.id)
+            if not zones:
+                continue
+            camera_zones: dict[str, Any] = {}
+            checkout_lanes: list[dict[str, Any]] = []
+            for zone in zones:
+                zone_dict = {
+                    "zone_id": zone.zone_id,
+                    "polygon": zone.polygon,
+                }
+                if zone.label:
+                    zone_dict["label"] = zone.label
+                if zone.entry_vector is not None:
+                    zone_dict["entry_vector"] = zone.entry_vector
+
+                if zone.zone_type == "portal":
+                    camera_zones["portal"] = zone_dict
+                elif zone.zone_type == "checkout_lane":
+                    lane_dict = dict(zone_dict)
+                    if zone.lane_id is not None:
+                        lane_dict["lane_id"] = zone.lane_id
+                    checkout_lanes.append(lane_dict)
+                elif zone.zone_type == "entrance":
+                    camera_zones["entrance"] = zone_dict
+                elif zone.zone_type == "exit":
+                    camera_zones["exit"] = zone_dict
+
+            if checkout_lanes:
+                checkout_lanes.sort(key=lambda item: item.get("lane_id") or 0)
+                camera_zones["checkout_lanes"] = checkout_lanes
+            if camera_zones:
+                cameras_payload[camera.camera_id] = camera_zones
+
+        return {
+            "store_id": store.store_id,
+            "group_code": group_code,
+            "hysteresis_sec": hysteresis_sec,
+            "cameras": cameras_payload,
+        }
+
     def to_config_dict(self, store: StoreRecord, *, group_code: str | None = None) -> dict[str, Any]:
         cameras = self.list_cameras(store.id)
         if group_code is None:
@@ -315,6 +529,8 @@ class StoreRepository:
                     (store.group_db_id,),
                 ).fetchone()
             group_code = str(row["group_code"]) if row else ""
+
+        zones_payload = self.build_zones_payload(store, group_code=group_code)
 
         return {
             "group_code": group_code,
@@ -331,6 +547,7 @@ class StoreRepository:
             "cameras": {
                 cam.camera_id: {
                     "description": cam.description,
+                    "camera_role": cam.camera_role,
                     "ocr_roi": {
                         "x": cam.ocr_x,
                         "y": cam.ocr_y,
@@ -340,9 +557,11 @@ class StoreRepository:
                 }
                 for cam in cameras
             },
+            "zones": zones_payload,
             "sync": {
                 "ocr_sample_interval_sec": store.ocr_sample_interval_sec,
                 "ocr_min_confidence": store.ocr_min_confidence,
                 "pos_match_delta_sec": store.pos_match_delta_sec,
+                "r1_min_checkout_duration_sec": store.r1_min_checkout_duration_sec,
             },
         }

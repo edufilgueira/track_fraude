@@ -49,11 +49,15 @@ def seed_demo_store(
         ocr_min_confidence=0.5,
         pos_match_delta_sec=60,
     )
-    for camera_id, description in (("cam1", "Entrada"), ("cam2", "Checkout")):
+    for camera_id, description, role in (
+        ("cam1", "Entrada", "entrance"),
+        ("cam2", "Checkout", "checkout"),
+    ):
         store_repo.create_camera(
             store_db_id=store.id,
             camera_id=camera_id,
             description=description,
+            camera_role=role,
             ocr_x=10,
             ocr_y=10,
             ocr_width=420,

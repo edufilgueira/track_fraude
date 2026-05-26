@@ -17,20 +17,50 @@ class FilePosClient(PosClient):
     def _path_for_date(self, date: str) -> Path:
         return self.pos_root / date / "transactions.json"
 
-    def get_day_export(self, store_id: str, date: str) -> PosDayExport:
-        path = self._path_for_date(date)
-        if not path.exists():
-            raise FileNotFoundError(f"POS não encontrado: {path}")
+    def _load_export(self, store_id: str, date: str) -> PosDayExport:
+        legacy_path = self._path_for_date(date)
+        if legacy_path.exists():
+            with legacy_path.open(encoding="utf-8") as handle:
+                payload = json.load(handle)
+            export = PosDayExport.from_dict(payload)
+            if export.store_id != store_id:
+                raise ValueError(
+                    f"store_id esperado {store_id}, arquivo contém {export.store_id}"
+                )
+            return export
 
-        with path.open(encoding="utf-8") as handle:
+        consolidated_path = self.pos_root / "transactions.json"
+        if not consolidated_path.exists():
+            raise FileNotFoundError(
+                f"POS não encontrado: {legacy_path} ou {consolidated_path}"
+            )
+
+        with consolidated_path.open(encoding="utf-8") as handle:
             payload = json.load(handle)
+
+        if isinstance(payload.get("exports"), list):
+            for item in payload["exports"]:
+                if item.get("store_id") == store_id and item.get("date") == date:
+                    merged = dict(item)
+                    merged.setdefault("timezone", payload.get("timezone", "America/Sao_Paulo"))
+                    return PosDayExport.from_dict(merged)
+            raise FileNotFoundError(
+                f"POS não encontrado para store_id={store_id} date={date} em {consolidated_path}"
+            )
 
         export = PosDayExport.from_dict(payload)
         if export.store_id != store_id:
             raise ValueError(
                 f"store_id esperado {store_id}, arquivo contém {export.store_id}"
             )
+        if export.date != date:
+            raise FileNotFoundError(
+                f"POS em {consolidated_path} é do dia {export.date}, pedido {date}"
+            )
         return export
+
+    def get_day_export(self, store_id: str, date: str) -> PosDayExport:
+        return self._load_export(store_id, date)
 
     def get_transactions_between(
         self,

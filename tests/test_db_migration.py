@@ -74,3 +74,4 @@ def test_migrate_legacy_database_without_group_db_id(tmp_path: Path):
         columns = {row[1] for row in conn.execute("PRAGMA table_info(stores)")}
     assert "group_db_id" in columns
     assert "street" in columns
+    assert "r1_min_checkout_duration_sec" in columns

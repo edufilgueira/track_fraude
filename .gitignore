@@ -21,3 +21,5 @@ data/output/**/*
 
 # Banco SQLite local
 data/track_fraude.db
+*.mp4 
+data/video* 

@@ -33,3 +33,27 @@ def track_phase_status(state: dict[str, Any], camera_ids: list[str]) -> str:
     if any(status == "completed" for status in statuses):
         return "partial"
     return "pending"
+
+
+def events_phase_status(state: dict[str, Any], camera_ids: list[str]) -> str:
+    """Calcula status da fase events com base nas câmeras cadastradas."""
+    if not camera_ids:
+        return "completed"
+
+    statuses = [
+        state.get("cameras", {}).get(cam, {}).get("events", "pending")
+        for cam in camera_ids
+    ]
+    if all(status == "completed" for status in statuses):
+        return "completed"
+    if any(status == "completed" for status in statuses):
+        return "partial"
+    return "pending"
+
+
+def pos_match_phase_status(state: dict[str, Any]) -> str:
+    return str(state.get("phases", {}).get("pos_match", {}).get("status", "pending"))
+
+
+def alerts_phase_status(state: dict[str, Any]) -> str:
+    return str(state.get("phases", {}).get("alerts", {}).get("status", "pending"))

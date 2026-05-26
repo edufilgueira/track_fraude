@@ -51,13 +51,22 @@ class ProcessedScope(StoreScope):
     def manifest_path(self, date: str, camera_id: str) -> Path:
         return self.date_dir(date) / camera_id / "manifest.json"
 
+    def events_dir(self, date: str) -> Path:
+        return self.date_dir(date) / "events"
+
+    def timelines_path(self, date: str) -> Path:
+        return self.events_dir(date) / "timelines.json"
+
+    def alerts_dir(self, date: str) -> Path:
+        return self.date_dir(date) / "alerts"
+
+    def alerts_index_path(self, date: str) -> Path:
+        return self.alerts_dir(date) / "index.json"
+
+    def alert_dir(self, date: str, alert_id: str) -> Path:
+        return self.alerts_dir(date) / alert_id
+
 
 @dataclass(frozen=True)
 class OutputScope(StoreScope):
-    """Entregáveis para revisão humana em data/output/."""
-
-    def alerts_index_path(self, date: str) -> Path:
-        return self.date_dir(date) / "alerts" / "index.json"
-
-    def alert_dir(self, date: str, alert_id: str) -> Path:
-        return self.date_dir(date) / "alerts" / alert_id
+    """Reservado para entregáveis futuros (ex.: exportação para revisão na Fase 8)."""

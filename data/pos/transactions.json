@@ -1,0 +1,23 @@
+{
+  "store_id": "LOJA-01",
+  "date": "2026-05-22",
+  "timezone": "America/Sao_Paulo",
+  "transactions": [
+    {
+      "transaction_id": "TX-001",
+      "t_sale": "2026-05-22T10:01:00",
+      "lane_id": 1,
+      "status": "paid",
+      "items": [
+        {
+          "sku": "789",
+          "name": "Refrigerante 2L",
+          "qty": 1,
+          "unit_price": 6.5
+        }
+      ],
+      "qty_total": 1,
+      "total_value": 6.5
+    }
+  ]
+}

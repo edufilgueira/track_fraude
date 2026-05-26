@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from track_fraude.cli_store import add_store_cli_args, load_job_store_config
 from track_fraude.models.sync import SyncMap
-from track_fraude.pos import FilePosClient
+from track_fraude.pos import DEFAULT_POS_API_URL, create_pos_client
 from track_fraude.storage import ProcessedScope, processed_root
 from track_fraude.sync import load_sync_map
 
@@ -38,6 +38,11 @@ def main() -> None:
     parser.add_argument("--from-time", default="06:10:00")
     parser.add_argument("--to-time", default="06:15:00")
     parser.add_argument("--delta-sec", type=int, default=None)
+    parser.add_argument(
+        "--pos-api-url",
+        default=None,
+        help=f"URL da API POS provisória (ex.: {DEFAULT_POS_API_URL})",
+    )
     args = parser.parse_args()
 
     config = load_job_store_config(args)
@@ -69,7 +74,10 @@ def main() -> None:
     t_from = parse_time_arg(args.from_time, args.date) - timedelta(seconds=delta)
     t_to = parse_time_arg(args.to_time, args.date) + timedelta(seconds=delta)
 
-    pos = FilePosClient(ROOT / "data" / "pos")
+    pos = create_pos_client(
+        pos_root=ROOT / "data" / "pos",
+        pos_api_url=args.pos_api_url,
+    )
     matches = pos.get_transactions_between(
         store_id=store_id,
         date=args.date,

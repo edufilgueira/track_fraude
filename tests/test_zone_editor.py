@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from server.app import create_app
+from track_fraude_core.db import GroupRepository, StoreRepository
+from track_fraude_core.db.camera_roles import CAMERA_ROLE_CHECKOUT, CAMERA_ROLE_ENTRANCE
+from track_fraude_core.store_config import load_store_config
+from track_fraude.zones import load_zones_for_store_config
+
+
+@pytest.fixture
+def db_path(tmp_path: Path) -> Path:
+    path = tmp_path / "test.db"
+    return path
+
+
+@pytest.fixture
+def settings_path(db_path: Path, tmp_path: Path) -> Path:
+    path = tmp_path / "settings.yaml"
+    path.write_text(
+        f"""
+app:
+  secret_key: test-secret
+database:
+  path: {db_path.as_posix()}
+auth:
+  admin_username: admin
+  admin_password: admin123
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def repo(db_path: Path) -> StoreRepository:
+    return StoreRepository(db_path)
+
+
+@pytest.fixture
+def group_repo(db_path: Path) -> GroupRepository:
+    return GroupRepository(db_path)
+
+
+@pytest.fixture
+def client(settings_path: Path) -> TestClient:
+    return TestClient(create_app(settings_path))
+
+
+def login(client: TestClient) -> None:
+    response = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin123"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def _ensure_group(group_repo: GroupRepository, code: str = "default") -> int:
+    existing = group_repo.get_group_by_code(code)
+    if existing:
+        return existing.id
+    return group_repo.create_group(group_code=code, name="Default").id
+
+
+def seed_entrance_camera(repo: StoreRepository, group_repo: GroupRepository) -> tuple[int, int]:
+    group_id = _ensure_group(group_repo)
+    store = repo.create_store(group_db_id=group_id, store_id="LOJA-01", name="Loja")
+    camera = repo.create_camera(
+        store_db_id=store.id,
+        camera_id="cam1",
+        description="Porta",
+        camera_role=CAMERA_ROLE_ENTRANCE,
+    )
+    return store.id, camera.id
+
+
+def seed_checkout_camera(repo: StoreRepository, group_repo: GroupRepository) -> tuple[int, int]:
+    group_id = _ensure_group(group_repo, "checkout-test")
+    store = repo.create_store(group_db_id=group_id, store_id="LOJA-02", name="Loja 2")
+    camera = repo.create_camera(
+        store_db_id=store.id,
+        camera_id="cam2",
+        description="Caixa",
+        camera_role=CAMERA_ROLE_CHECKOUT,
+    )
+    return store.id, camera.id
+
+
+def test_save_portal_zone_in_sqlite(repo: StoreRepository, group_repo: GroupRepository):
+    _store_id, camera_id = seed_entrance_camera(repo, group_repo)
+    zone = repo.save_camera_zone(
+        camera_db_id=camera_id,
+        zone_type="portal",
+        zone_id="portal",
+        label="Porta",
+        polygon=[[10, 10], [100, 10], [100, 100], [10, 100]],
+        entry_vector=[0, 1],
+    )
+    assert zone.zone_id == "portal"
+    assert zone.entry_vector == [0.0, 1.0]
+    assert len(repo.list_camera_zones(camera_id)) == 1
+
+
+def test_zones_in_store_config(repo: StoreRepository, group_repo: GroupRepository, db_path: Path):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    store = repo.get_store(store_id)
+    assert store is not None
+    repo.save_camera_zone(
+        camera_db_id=camera_id,
+        zone_type="checkout_lane",
+        zone_id="checkout_lane_3",
+        label="Caixa 3",
+        lane_id=3,
+        polygon=[[820, 300], [1120, 300], [1120, 650], [820, 650]],
+    )
+    config = load_store_config(
+        store_id="LOJA-02",
+        group_code="checkout-test",
+        db_path=db_path,
+    )
+    zones = load_zones_for_store_config(config)
+    assert zones is not None
+    assert "cam2" in zones.cameras
+    assert len(zones.cameras["cam2"].checkout_lanes) == 1
+    assert zones.cameras["cam2"].checkout_lanes[0].lane_id == 3
+
+
+def test_zone_editor_page(client: TestClient, repo: StoreRepository, group_repo: GroupRepository):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    response = client.get(f"/stores/{store_id}/cameras/{camera_id}/zone-editor")
+    assert response.status_code == 200
+    assert "Polígonos de zona" in response.text
+    assert "zone_editor.js" in response.text
+    assert 'id="lane-tabs"' in response.text
+    assert 'id="add-lane"' in response.text
+    assert 'id="r1-min-duration-sec"' in response.text
+
+
+def test_save_r1_min_checkout_duration_api(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository
+):
+    store_id, _camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    response = client.post(
+        f"/stores/{store_id}/r1-min-checkout-duration",
+        json={"r1_min_checkout_duration_sec": 90},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["r1_min_checkout_duration_sec"] == 90
+
+    store = repo.get_store(store_id)
+    assert store is not None
+    assert store.r1_min_checkout_duration_sec == 90
+
+
+def test_save_multiple_checkout_lanes_api(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository
+):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    base = f"/stores/{store_id}/cameras/{camera_id}/zones"
+    for lane_id, polygon in (
+        (1, [[80, 300], [380, 300], [380, 650], [80, 650]]),
+        (2, [[450, 300], [750, 300], [750, 650], [450, 650]]),
+        (3, [[820, 300], [1120, 300], [1120, 650], [820, 650]]),
+    ):
+        response = client.post(
+            base,
+            json={
+                "zone_type": "checkout_lane",
+                "zone_id": f"checkout_lane_{lane_id}",
+                "lane_id": lane_id,
+                "label": f"Caixa {lane_id}",
+                "polygon": polygon,
+            },
+        )
+        assert response.status_code == 200
+
+    zones = repo.list_camera_zones(camera_id)
+    assert len(zones) == 3
+    assert sorted(z.lane_id for z in zones) == [1, 2, 3]
+
+
+def test_delete_checkout_lane_api(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository
+):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    client.post(
+        f"/stores/{store_id}/cameras/{camera_id}/zones",
+        json={
+            "zone_type": "checkout_lane",
+            "zone_id": "checkout_lane_2",
+            "lane_id": 2,
+            "label": "Caixa 2",
+            "polygon": [[100, 100], [200, 100], [200, 200], [100, 200]],
+        },
+    )
+    response = client.delete(
+        f"/stores/{store_id}/cameras/{camera_id}/zones/checkout_lane_2"
+    )
+    assert response.status_code == 200
+    zones = repo.list_camera_zones(camera_id)
+    assert zones == []
+
+
+def test_zone_save_api(client: TestClient, repo: StoreRepository, group_repo: GroupRepository):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    response = client.post(
+        f"/stores/{store_id}/cameras/{camera_id}/zones",
+        json={
+            "zone_type": "checkout_lane",
+            "zone_id": "checkout_lane_2",
+            "lane_id": 2,
+            "label": "Caixa 2",
+            "polygon": [[100, 100], [200, 100], [200, 200], [100, 200]],
+        },
+    )
+    assert response.status_code == 200
+    zones = repo.list_camera_zones(camera_id)
+    assert len(zones) == 1
+    assert zones[0].lane_id == 2
+
+
+def test_camera_form_has_role_select(client: TestClient, repo: StoreRepository, group_repo: GroupRepository):
+    store_id, camera_id = seed_entrance_camera(repo, group_repo)
+    login(client)
+    response = client.get(f"/stores/{store_id}/cameras/{camera_id}/edit")
+    assert response.status_code == 200
+    assert 'name="camera_role"' in response.text
+    assert "Definir zona no vídeo" in response.text
