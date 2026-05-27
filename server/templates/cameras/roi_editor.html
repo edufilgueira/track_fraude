@@ -4,8 +4,7 @@
 <div class="card">
   <h2>Selecionar ROI — {{ camera.camera_id }}</h2>
   <p class="hint">
-    Vídeo esperado: <code>{{ video_relpath }}</code>.
-    A captura usa OpenCV no servidor (ideal para DVR).
+    Capture um frame no servidor — outros dispositivos editam sem o MP4 local.
     Loja: <strong>{{ store.name }}</strong>
   </p>
 
@@ -35,7 +34,7 @@
       </div>
       <div class="form-row">
         <label>&nbsp;</label>
-        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available %} disabled{% endif %}>
+        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available and not saved_frame_available %} disabled{% endif %}>
           Capturar frame
         </button>
       </div>
@@ -43,10 +42,12 @@
   </div>
 
   <div class="roi-status" id="roi-status">
-    {% if video_available %}
-      Carregando frame de {{ video_relpath }}…
+    {% if saved_frame_available %}
+      Carregando frame salvo no servidor…
+    {% elif video_available %}
+      Vídeo disponível — clique em Capturar frame para salvar a imagem no servidor.
     {% else %}
-      Vídeo não encontrado em {{ video_relpath }}. Copie o MP4 ou faça upload.
+      Vídeo não encontrado{% if video_relpath %} em {{ video_relpath }}{% endif %}. Faça upload ou use um frame já salvo.
     {% endif %}
   </div>
 
@@ -77,6 +78,8 @@
     videoAvailable: {{ video_available | tojson }},
     videoRelpath: {{ video_relpath | tojson }},
     videoDuration: {{ video_duration | tojson if video_duration is not none else 'null' }},
+    savedFrameAvailable: {{ saved_frame_available | tojson }},
+    savedFrameUrl: {{ saved_frame_url | tojson }},
     initialRoi: {
       x: {{ camera.ocr_x }},
       y: {{ camera.ocr_y }},
@@ -85,5 +88,5 @@
     },
   };
 </script>
-<script src="/static/roi_editor.js?v=4"></script>
+<script src="/static/roi_editor.js?v=8"></script>
 {% endblock %}

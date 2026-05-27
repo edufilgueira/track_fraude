@@ -5,7 +5,7 @@
   "transactions": [
     {
       "transaction_id": "TX-001",
-      "t_sale": "2026-05-22T10:01:00",
+      "t_sale": "2026-05-22T09:01:00",
       "lane_id": 1,
       "status": "paid",
       "items": [

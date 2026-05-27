@@ -40,9 +40,10 @@ def build_r1_alert(
     date: str,
     track: dict[str, Any],
     session: dict[str, Any],
+    store_timeline: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     alert_id = f"AL-{date.replace('-', '')}-{alert_index:04d}"
-    return {
+    payload: dict[str, Any] = {
         "alert_id": alert_id,
         "rule_id": "R1",
         "severity": "high",
@@ -64,6 +65,27 @@ def build_r1_alert(
             f"por {session.get('duration_sec', 0):.0f}s sem venda registrada"
         ),
     }
+    global_person_id = track.get("global_person_id")
+    if global_person_id:
+        payload["global_person_id"] = global_person_id
+    if store_timeline:
+        payload["store_timeline"] = store_timeline
+    return payload
+
+
+def _store_timeline_for_track(
+    timelines: dict[str, Any], track: dict[str, Any]
+) -> list[dict[str, Any]]:
+    global_person_id = track.get("global_person_id")
+    if not global_person_id:
+        return []
+    entrance_camera = timelines.get("persons_ref", {}).get("entrance_camera", "cam1")
+    for other in timelines.get("tracks", []):
+        if other.get("global_person_id") != global_person_id:
+            continue
+        if other.get("camera_id") == entrance_camera:
+            return list(other.get("timeline", []))
+    return []
 
 
 def evaluate_r1_alerts(
@@ -74,17 +96,26 @@ def evaluate_r1_alerts(
 ) -> list[dict[str, Any]]:
     alerts: list[dict[str, Any]] = []
     alert_index = 1
+    seen_person_session: set[tuple[str, str]] = set()
 
     for track in timelines.get("tracks", []):
         for session in track.get("checkout_sessions", []):
             if not evaluate_r1_session(session, min_duration_sec=min_duration_sec):
                 continue
+            global_person_id = track.get("global_person_id")
+            session_id = str(session.get("session_id", ""))
+            if global_person_id:
+                dedupe_key = (str(global_person_id), session_id)
+                if dedupe_key in seen_person_session:
+                    continue
+                seen_person_session.add(dedupe_key)
             alerts.append(
                 build_r1_alert(
                     alert_index=alert_index,
                     date=date,
                     track=track,
                     session=session,
+                    store_timeline=_store_timeline_for_track(timelines, track),
                 )
             )
             alert_index += 1

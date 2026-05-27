@@ -21,5 +21,14 @@ data/output/**/*
 
 # Banco SQLite local
 data/track_fraude.db
+data/track_fraude.db-shm
+data/track_fraude.db-wal
 *.mp4 
-data/video* 
+data/video*
+
+# Frames salvos pelos editores ROI/zona (por câmera no painel web)
+server/upload/editor_frames/**/*
+!server/upload/editor_frames/.gitkeep
+
+# Legado — frames antigos em data/ (migrados para server/upload/ no startup)
+data/editor_frames/

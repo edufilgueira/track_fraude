@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,18 @@ from track_fraude_core.db import GroupRepository, StoreRepository
 from track_fraude_core.db.camera_roles import CAMERA_ROLE_CHECKOUT, CAMERA_ROLE_ENTRANCE
 from track_fraude_core.store_config import load_store_config
 from track_fraude.zones import load_zones_for_store_config
+
+
+@pytest.fixture(autouse=True)
+def isolated_editor_frames(monkeypatch, tmp_path: Path):
+    frames_root = tmp_path / "editor_frames"
+    monkeypatch.setattr(
+        "server.services.editor_frame_storage.EDITOR_FRAMES_ROOT", frames_root
+    )
+    monkeypatch.setattr(
+        "server.services.editor_frame_storage.LEGACY_DATA_FRAMES_ROOT",
+        tmp_path / "legacy_editor_frames",
+    )
 
 
 @pytest.fixture
@@ -128,6 +141,81 @@ def test_zones_in_store_config(repo: StoreRepository, group_repo: GroupRepositor
     assert "cam2" in zones.cameras
     assert len(zones.cameras["cam2"].checkout_lanes) == 1
     assert zones.cameras["cam2"].checkout_lanes[0].lane_id == 3
+
+
+def test_editor_frame_not_found(client: TestClient, repo: StoreRepository, group_repo: GroupRepository):
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    response = client.get(f"/stores/{store_id}/cameras/{camera_id}/editor-frame")
+    assert response.status_code == 404
+
+
+def test_editor_frame_saved_and_served(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository
+):
+    from server.services.editor_frame_storage import save_editor_frame
+
+    store_id, camera_id = seed_checkout_camera(repo, group_repo)
+    save_editor_frame(
+        store_db_id=store_id,
+        camera_db_id=camera_id,
+        camera_id="cam2",
+        jpeg=b"\xff\xd8\xff\xd9",
+        width=640,
+        height=480,
+        source="test",
+    )
+    login(client)
+    response = client.get(f"/stores/{store_id}/cameras/{camera_id}/editor-frame")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers.get("x-editor-frame-url")
+
+
+def test_editor_frame_legacy_migration(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository, tmp_path: Path
+):
+    from server.services import editor_frame_storage
+
+    store_id, camera_db_id = seed_checkout_camera(repo, group_repo)
+    legacy_dir = editor_frame_storage.EDITOR_FRAMES_ROOT / str(store_id) / str(camera_db_id)
+    legacy_dir.mkdir(parents=True)
+    legacy_jpeg = legacy_dir / "frame.jpg"
+    legacy_jpeg.write_bytes(b"\xff\xd8\xff\xd9")
+
+    login(client)
+    response = client.get(f"/stores/{store_id}/cameras/{camera_db_id}/zone-editor")
+    assert response.status_code == 200
+    assert "Carregando frame salvo no servidor" in response.text
+
+    migrated = editor_frame_storage.editor_frame_jpeg_path(
+        store_db_id=store_id, camera_db_id=camera_db_id
+    )
+    assert migrated.exists()
+
+
+def test_migrate_legacy_data_editor_frames(tmp_path: Path, monkeypatch):
+    from server.services import editor_frame_storage
+
+    frames_root = tmp_path / "upload" / "editor_frames"
+    legacy_root = tmp_path / "data" / "editor_frames"
+    monkeypatch.setattr(editor_frame_storage, "EDITOR_FRAMES_ROOT", frames_root)
+    monkeypatch.setattr(editor_frame_storage, "LEGACY_DATA_FRAMES_ROOT", legacy_root)
+
+    legacy_dir = legacy_root / "3" / "7"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "frame.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+    (legacy_dir / "frame.json").write_text(
+        '{"store_db_id":3,"camera_db_id":7,"camera_id":"cam7"}',
+        encoding="utf-8",
+    )
+
+    count = editor_frame_storage.migrate_legacy_data_editor_frames()
+    assert count == 1
+    target = frames_root / "3" / "7" / "frame.jpg"
+    assert target.exists()
+    meta = json.loads((frames_root / "3" / "7" / "frame.json").read_text(encoding="utf-8"))
+    assert meta["camera_id"] == "cam7"
 
 
 def test_zone_editor_page(client: TestClient, repo: StoreRepository, group_repo: GroupRepository):

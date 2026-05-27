@@ -57,3 +57,7 @@ def pos_match_phase_status(state: dict[str, Any]) -> str:
 
 def alerts_phase_status(state: dict[str, Any]) -> str:
     return str(state.get("phases", {}).get("alerts", {}).get("status", "pending"))
+
+
+def merge_phase_status(state: dict[str, Any]) -> str:
+    return str(state.get("phases", {}).get("merge", {}).get("status", "pending"))

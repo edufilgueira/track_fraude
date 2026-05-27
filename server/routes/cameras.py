@@ -8,8 +8,15 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from server.dependencies import get_store_repo, get_templates
+from server.services.editor_frame_storage import (
+    editor_frame_exists,
+    editor_frame_jpeg_path,
+    editor_frame_url,
+    load_editor_frame_meta,
+    save_editor_frame,
+)
 from server.services.frame_extract import extract_frame_jpeg
-from server.services.video_storage import raw_video_path, raw_video_relpath
+from server.services.video_storage import copy_raw_video, raw_video_path, raw_video_relpath
 from track_fraude_core.db.camera_roles import (
     CAMERA_ROLE_CHECKOUT,
     CAMERA_ROLE_ENTRANCE,
@@ -63,6 +70,7 @@ def _jpeg_frame_response(
     height: int,
     duration_sec: float,
     video_path: str | None = None,
+    editor_frame_url_value: str | None = None,
 ) -> Response:
     headers = {
         "X-Frame-Width": str(width),
@@ -72,7 +80,74 @@ def _jpeg_frame_response(
     }
     if video_path:
         headers["X-Video-Path"] = video_path
+    if editor_frame_url_value:
+        headers["X-Editor-Frame-Url"] = editor_frame_url_value
+        headers["X-Editor-Frame-Saved"] = "true"
     return Response(content=jpeg, media_type="image/jpeg", headers=headers)
+
+
+def _editor_frame_page_context(store_db_id: int, camera_db_id: int, camera_id: str) -> dict:
+    saved = editor_frame_exists(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera_id,
+    )
+    meta = (
+        load_editor_frame_meta(
+            store_db_id=store_db_id,
+            camera_db_id=camera_db_id,
+            camera_id=camera_id,
+        )
+        if saved
+        else None
+    )
+    return {
+        "saved_frame_available": saved,
+        "saved_frame_url": editor_frame_url(store_db_id=store_db_id, camera_db_id=camera_db_id)
+        if saved
+        else None,
+        "saved_frame_meta": meta,
+    }
+
+
+def _persist_editor_frame(
+    *,
+    store_db_id: int,
+    camera_db_id: int,
+    camera_id: str,
+    jpeg: bytes,
+    width: int,
+    height: int,
+    duration_sec: float,
+    source: str,
+    video_date: str | None = None,
+    seconds: float | None = None,
+    video_relpath: str | None = None,
+) -> Response:
+    save_editor_frame(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera_id,
+        jpeg=jpeg,
+        width=width,
+        height=height,
+        source=source,
+        video_date=video_date,
+        seconds=seconds,
+        video_relpath=video_relpath,
+        duration_sec=duration_sec,
+    )
+
+    return _jpeg_frame_response(
+        jpeg,
+        width=width,
+        height=height,
+        duration_sec=duration_sec,
+        video_path=video_relpath,
+        editor_frame_url_value=editor_frame_url(
+            store_db_id=store_db_id, camera_db_id=camera_db_id
+        ),
+    )
 
 
 def _extract_storage_frame(camera_id: str, date: str, seconds: float) -> Response:
@@ -136,6 +211,7 @@ async def roi_editor_page(
             "video_relpath": raw_video_relpath(
                 date=default_video_date, camera_id=camera.camera_id
             ),
+            **_editor_frame_page_context(store_db_id, camera_db_id, camera.camera_id),
         },
     )
 
@@ -174,9 +250,10 @@ async def upload_camera_frame(
     camera_db_id: int,
     video: UploadFile = File(...),
     seconds: float = Form(0.0),
+    date: str | None = Form(default=None),
 ) -> Response:
     """Extrai frame no servidor (fallback para codecs que o navegador não reproduz)."""
-    _get_camera_or_404(store_db_id, camera_db_id)
+    _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
 
     suffix = Path(video.filename or "video.mp4").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -188,6 +265,9 @@ async def upload_camera_frame(
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Arquivo maior que 500 MB")
 
+    video_date = date.strip() if date else None
+    video_relpath: str | None = None
+
     tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(suffix=suffix or ".mp4", delete=False) as tmp:
@@ -195,13 +275,62 @@ async def upload_camera_frame(
             tmp_path = Path(tmp.name)
 
         jpeg, width, height, duration_sec = extract_frame_jpeg(tmp_path, seconds=seconds)
+
+        if video_date:
+            copy_raw_video(date=video_date, camera_id=camera.camera_id, source=tmp_path)
+            video_relpath = raw_video_relpath(date=video_date, camera_id=camera.camera_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
 
-    return _jpeg_frame_response(jpeg, width=width, height=height, duration_sec=duration_sec)
+    return _persist_editor_frame(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera.camera_id,
+        jpeg=jpeg,
+        width=width,
+        height=height,
+        duration_sec=duration_sec,
+        source="upload",
+        video_date=video_date,
+        seconds=seconds,
+        video_relpath=video_relpath,
+    )
+
+
+@router.get("/{store_db_id}/cameras/{camera_db_id}/editor-frame")
+async def get_editor_frame(
+    store_db_id: int,
+    camera_db_id: int,
+) -> Response:
+    """Frame JPEG persistido no servidor (acessível de qualquer dispositivo)."""
+    _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    if not editor_frame_exists(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera.camera_id,
+    ):
+        raise HTTPException(status_code=404, detail="Nenhum frame salvo para esta câmera")
+    jpeg_path = editor_frame_jpeg_path(
+        store_db_id=store_db_id, camera_db_id=camera_db_id
+    )
+    jpeg = jpeg_path.read_bytes()
+    meta = load_editor_frame_meta(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera.camera_id,
+    ) or {}
+    return _jpeg_frame_response(
+        jpeg,
+        width=int(meta.get("width") or 0),
+        height=int(meta.get("height") or 0),
+        duration_sec=float(meta.get("duration_sec") or 0),
+        editor_frame_url_value=editor_frame_url(
+            store_db_id=store_db_id, camera_db_id=camera_db_id
+        ),
+    )
 
 
 @router.get("/{store_db_id}/cameras/{camera_db_id}/frame-preview")
@@ -223,9 +352,33 @@ async def frame_from_storage(
     date: str = Form(...),
     seconds: float = Form(0.0),
 ) -> Response:
-    """Extrai frame de data/raw/video/{date}/{camera_id}.mp4 (sem upload)."""
+    """Extrai frame do vídeo local e salva no servidor (o MP4 original é mantido)."""
     _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
-    return _extract_storage_frame(camera.camera_id, date, seconds)
+    video_path = raw_video_path(date=date, camera_id=camera.camera_id)
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Vídeo não encontrado: {raw_video_relpath(date=date, camera_id=camera.camera_id)}",
+        )
+    try:
+        jpeg, width, height, duration_sec = extract_frame_jpeg(video_path, seconds=seconds)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    relpath = raw_video_relpath(date=date, camera_id=camera.camera_id)
+    return _persist_editor_frame(
+        store_db_id=store_db_id,
+        camera_db_id=camera_db_id,
+        camera_id=camera.camera_id,
+        jpeg=jpeg,
+        width=width,
+        height=height,
+        duration_sec=duration_sec,
+        source="storage",
+        video_date=date.strip(),
+        seconds=seconds,
+        video_relpath=relpath,
+    )
 
 
 def _zones_for_response(repo, camera_db_id: int) -> list[dict]:
@@ -265,6 +418,7 @@ async def zone_editor_page(
                 date=default_video_date, camera_id=camera.camera_id
             ),
             "existing_zones": _zones_for_response(repo, camera_db_id),
+            **_editor_frame_page_context(store_db_id, camera_db_id, camera.camera_id),
         },
     )
 

@@ -10,6 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from server.auth import get_current_user_id
 from server.dependencies import configure, get_settings, get_user_repo
 from server.routes import auth, cameras, groups, stores
+from server.services.editor_frame_storage import migrate_legacy_data_editor_frames
 from track_fraude_core.db import init_database
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -27,6 +28,7 @@ def create_app(settings_path: Path | str | None = None) -> FastAPI:
         password=settings.admin_password,
         display_name=settings.admin_display_name,
     )
+    migrate_legacy_data_editor_frames()
 
     app = FastAPI(title=f"{settings.app_name} — Painel")
 

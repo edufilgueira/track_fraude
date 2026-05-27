@@ -62,17 +62,32 @@
     </div>
     <div class="form-row-inline">
       <div class="form-row">
-        <label for="ocr_sample_interval_sec">OCR intervalo (s)</label>
+        <label for="ocr_sample_interval_sec" class="label-with-tip">
+          OCR intervalo (s)
+          <span class="field-tip" tabindex="0" role="button"
+            aria-label="Ajuda: OCR intervalo"
+            data-tip="Intervalo entre amostras de leitura do relógio no vídeo durante o run_sync. A cada N segundos o Tesseract lê o timestamp na ROI da câmera para montar o sync_map (frame → hora). Valores menores = mais preciso, porém mais lento.">?</span>
+        </label>
         <input type="number" id="ocr_sample_interval_sec" name="ocr_sample_interval_sec" min="5"
                value="{{ store.ocr_sample_interval_sec if store else 30 }}">
       </div>
       <div class="form-row">
-        <label for="ocr_min_confidence">OCR confiança mín.</label>
+        <label for="ocr_min_confidence" class="label-with-tip">
+          OCR confiança mín.
+          <span class="field-tip" tabindex="0" role="button"
+            aria-label="Ajuda: OCR confiança mínima"
+            data-tip="Confiança mínima do Tesseract para aceitar uma leitura de timestamp. Amostras abaixo desse valor são descartadas na construção do sync_map. Aumente se houver leituras erradas; reduza se o relógio no vídeo for difícil de ler.">?</span>
+        </label>
         <input type="number" step="0.01" id="ocr_min_confidence" name="ocr_min_confidence" min="0" max="1"
                value="{{ store.ocr_min_confidence if store else 0.5 }}">
       </div>
       <div class="form-row">
-        <label for="pos_match_delta_sec">Delta POS (s)</label>
+        <label for="pos_match_delta_sec" class="label-with-tip">
+          Delta POS (s)
+          <span class="field-tip" tabindex="0" role="button"
+            aria-label="Ajuda: Delta POS"
+            data-tip="Margem δ (segundos) ao cruzar vendas POS com sessões no caixa (run_pos_match). Busca transações entre t_start − δ e t_end + δ na mesma lane. Compensa atraso entre vídeo e PDV; δ alto pode associar a mesma venda a várias sessões próximas.">?</span>
+        </label>
         <input type="number" id="pos_match_delta_sec" name="pos_match_delta_sec" min="0"
                value="{{ store.pos_match_delta_sec if store else 60 }}">
       </div>

@@ -66,6 +66,15 @@ class ProcessedScope(StoreScope):
     def alert_dir(self, date: str, alert_id: str) -> Path:
         return self.alerts_dir(date) / alert_id
 
+    def merge_dir(self, date: str) -> Path:
+        return self.date_dir(date) / "merge"
+
+    def persons_path(self, date: str) -> Path:
+        return self.merge_dir(date) / "persons.json"
+
+    def cross_camera_links_path(self, date: str) -> Path:
+        return self.merge_dir(date) / "cross_camera_links.json"
+
 
 @dataclass(frozen=True)
 class OutputScope(StoreScope):

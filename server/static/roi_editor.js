@@ -22,6 +22,8 @@
   let imageObjectUrl = null;
   let videoDuration = config.videoDuration || 0;
   let currentFile = null;
+  let videoAvailable = !!config.videoAvailable;
+  let captureInProgress = false;
 
   function setStatus(message, kind) {
     status.textContent = message;
@@ -195,20 +197,74 @@
     return value;
   }
 
-  function previewUrl(date, seconds) {
+  function savedFrameLabel() {
+    return "editor_frames/" + config.storeId + "/" + config.cameraId + "/frame.jpg";
+  }
+
+  function savedFrameUrl() {
     return (
       "/stores/" + config.storeId + "/cameras/" + config.cameraId +
-      "/frame-preview?date=" + encodeURIComponent(date) +
-      "&seconds=" + encodeURIComponent(String(seconds)) +
-      "&_=" + Date.now()
+      "/editor-frame?_=" + Date.now()
     );
   }
 
-  function onFrameLoaded(label) {
-    frameSize = {
-      width: image.naturalWidth,
-      height: image.naturalHeight,
+  function frameEndpoint(action) {
+    return "/stores/" + config.storeId + "/cameras/" + config.cameraId + "/" + action;
+  }
+
+  async function parseFetchError(response) {
+    let detail = await response.text();
+    try {
+      detail = JSON.parse(detail).detail || detail;
+    } catch (_err) {
+      /* plain text */
+    }
+    return detail || ("HTTP " + response.status);
+  }
+
+  async function showCaptureResponse(response, label) {
+    applyCaptureHeaders(response);
+    const blob = await response.blob();
+    if (!blob.size) {
+      throw new Error("Resposta vazia do servidor");
+    }
+    roiBox.hidden = true;
+    revokeImageObjectUrl();
+    imageObjectUrl = URL.createObjectURL(blob);
+    image.onload = function () {
+      image.onload = null;
+      image.onerror = null;
+      onFrameLoaded(label, true);
     };
+    image.onerror = function () {
+      image.onload = null;
+      image.onerror = null;
+      stage.hidden = true;
+      setStatus("Não foi possível decodificar o JPEG retornado.", "error");
+    };
+    image.src = imageObjectUrl;
+  }
+
+  function applyCaptureHeaders(response) {
+    const durationHeader = Number(response.headers.get("X-Video-Duration") || 0);
+    if (durationHeader > 0) {
+      videoDuration = durationHeader;
+      seekInput.max = String(Math.floor(videoDuration * 10) / 10);
+    }
+    const widthHeader = Number(response.headers.get("X-Frame-Width") || 0);
+    const heightHeader = Number(response.headers.get("X-Frame-Height") || 0);
+    if (widthHeader > 0 && heightHeader > 0) {
+      frameSize = { width: widthHeader, height: heightHeader };
+    }
+  }
+
+  function onFrameLoaded(label, savedOnServer) {
+    if (!frameSize.width || !frameSize.height) {
+      frameSize = {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      };
+    }
     if (!frameSize.width || !frameSize.height) {
       setStatus("Frame inválido (0×0).", "error");
       stage.hidden = true;
@@ -219,93 +275,126 @@
     fileName.textContent = label;
     applyRoi(currentRoi, false);
     setStatus(
-      "Frame pronto. Arraste sobre o timestamp para definir o ROI (salva ao soltar).",
-      "info"
+      savedOnServer
+        ? "Frame salvo no servidor. Outros dispositivos podem editar sem o vídeo original."
+        : "Frame pronto. Arraste sobre o timestamp para definir o ROI (salva ao soltar).",
+      savedOnServer ? "success" : "info"
     );
   }
 
-  function loadFrameFromStorage() {
-    const date = (videoDateInput.value || "").trim();
+  function loadImageFromUrl(url, label, savedOnServer) {
+    roiBox.hidden = true;
+    revokeImageObjectUrl();
+    image.onload = function () {
+      image.onload = null;
+      image.onerror = null;
+      onFrameLoaded(label, savedOnServer);
+    };
+    image.onerror = function () {
+      image.onload = null;
+      image.onerror = null;
+      stage.hidden = true;
+      setStatus("Não foi possível carregar a imagem.", "error");
+    };
+    image.src = url;
+  }
+
+  function loadSavedFrame() {
+    loadImageFromUrl(savedFrameUrl(), "Frame salvo no servidor", true);
+  }
+
+  async function loadFrameFromStorage() {
+    if (captureInProgress) return;
+    const date = (videoDateInput && videoDateInput.value || "").trim();
     if (!date) {
       setStatus("Informe a data da gravação (YYYY-MM-DD).", "error");
       return;
     }
 
     const seconds = clampSeekSeconds(seekInput.value);
-    const label = "data/raw/video/" + date + "/" + config.cameraCode + ".mp4";
-    setStatus("Carregando " + label + " …", "pending");
-    roiBox.hidden = true;
+    const label =
+      "data/raw/video/" + date + "/" + config.cameraCode + ".mp4 → " + savedFrameLabel();
+    setStatus("Extraindo frame e salvando no servidor…", "pending");
     currentFile = null;
-    revokeImageObjectUrl();
+    captureInProgress = true;
 
-    image.onload = function () {
-      image.onload = null;
-      image.onerror = null;
-      onFrameLoaded(label);
-    };
-    image.onerror = function () {
-      image.onload = null;
-      image.onerror = null;
-      stage.hidden = true;
-      setStatus(
-        "Não foi possível carregar o frame. Confira se existe " + label,
-        "error"
-      );
-    };
-    image.src = previewUrl(date, seconds);
+    const formData = new FormData();
+    formData.append("date", date);
+    formData.append("seconds", String(seconds));
+
+    const url = frameEndpoint("frame-from-storage");
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(await parseFetchError(response));
+      }
+      await showCaptureResponse(response, label);
+    } catch (error) {
+      const message =
+        error && error.message === "Failed to fetch"
+          ? "Falha de rede ou servidor indisponível. Verifique se o painel está rodando e tente de novo."
+          : error.message;
+      setStatus("Erro: " + message, "error");
+    } finally {
+      captureInProgress = false;
+    }
   }
 
   async function loadFrameFromUpload() {
+    if (captureInProgress) return;
     if (!currentFile) {
-      loadFrameFromStorage();
+      if (videoAvailable) {
+        loadFrameFromStorage();
+      } else {
+        setStatus("Faça upload de um vídeo ou use o frame já salvo no servidor.", "error");
+      }
       return;
     }
 
+    const uploadFile = currentFile;
+    const uploadName = uploadFile.name || "vídeo";
+    const savedLabel = uploadName + " → " + savedFrameLabel();
     const seconds = clampSeekSeconds(seekInput.value);
-    setStatus("Extraindo frame no servidor (upload)…", "pending");
-    roiBox.hidden = true;
+    const date = (videoDateInput && videoDateInput.value || "").trim();
+    setStatus("Extraindo frame e salvando no servidor…", "pending");
     revokeImageObjectUrl();
+    captureInProgress = true;
 
     const formData = new FormData();
-    formData.append("video", currentFile);
+    formData.append("video", uploadFile);
     formData.append("seconds", String(seconds));
+    if (date) {
+      formData.append("date", date);
+    }
 
-    const url =
-      "/stores/" + config.storeId + "/cameras/" + config.cameraId + "/frame-upload";
+    const url = frameEndpoint("frame-upload");
 
     try {
-      const response = await fetch(url, { method: "POST", body: formData });
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
       if (!response.ok) {
-        let detail = await response.text();
-        try {
-          detail = JSON.parse(detail).detail || detail;
-        } catch (_err) {
-          /* plain text */
-        }
-        throw new Error(detail || "Falha ao extrair frame");
+        throw new Error(await parseFetchError(response));
       }
-
-      const durationHeader = Number(response.headers.get("X-Video-Duration") || 0);
-      if (durationHeader > 0) {
-        videoDuration = durationHeader;
-        seekInput.max = String(Math.floor(videoDuration * 10) / 10);
+      await showCaptureResponse(response, savedLabel);
+      if (date) {
+        videoAvailable = true;
       }
-
-      const blob = await response.blob();
-      imageObjectUrl = URL.createObjectURL(blob);
-      image.onload = function () {
-        image.onload = null;
-        image.onerror = null;
-        onFrameLoaded(currentFile.name);
-      };
-      image.onerror = function () {
-        image.onload = null;
-        image.onerror = null;
-        setStatus("Falha ao exibir frame extraído.", "error");
-      };
-      image.src = imageObjectUrl;
     } catch (error) {
-      setStatus("Erro ao extrair frame: " + error.message, "error");
+      const message =
+        error && error.message === "Failed to fetch"
+          ? "Falha de rede ou upload interrompido. Vídeos grandes podem demorar — aguarde ou use o MP4 já em data/raw/video/."
+          : error.message;
+      setStatus("Erro ao extrair frame: " + message, "error");
+    } finally {
+      captureInProgress = false;
     }
   }
 
@@ -322,7 +411,12 @@
     currentFile = file;
     captureBtn.disabled = false;
     seekInput.value = "0";
-    loadFrameFromUpload();
+    fileName.textContent = file.name + " — clique em Capturar frame";
+    setStatus(
+      "Arquivo selecionado. Clique em Capturar frame para extrair e salvar em " +
+        savedFrameLabel(),
+      "info"
+    );
   }
 
   stage.addEventListener("pointerdown", onPointerDown);
@@ -341,7 +435,9 @@
 
   loadFromStorageBtn.addEventListener("click", loadFrameFromStorage);
   captureBtn.addEventListener("click", captureFrame);
-  seekInput.addEventListener("change", captureFrame);
+  seekInput.addEventListener("change", function () {
+    if (currentFile || videoAvailable) captureFrame();
+  });
   window.addEventListener("resize", function () {
     renderRoiBox(currentRoi);
   });
@@ -354,13 +450,21 @@
     seekInput.max = String(Math.floor(videoDuration * 10) / 10);
   }
 
-  if (config.videoAvailable) {
+  if (config.savedFrameAvailable) {
     captureBtn.disabled = false;
-    loadFrameFromStorage();
-  } else if (config.videoRelpath) {
+    loadSavedFrame();
+  } else if (videoAvailable) {
+    captureBtn.disabled = false;
     setStatus(
-      "Vídeo não encontrado: " + config.videoRelpath + ". Copie o MP4 ou use upload.",
+      "Vídeo disponível no servidor. Clique em Capturar frame — a imagem será salva no servidor para edição em outros dispositivos.",
+      "info"
+    );
+  } else if (config.videoRelpath && !config.savedFrameAvailable) {
+    setStatus(
+      "Vídeo não encontrado: " + config.videoRelpath + ". Faça upload ou use um frame já salvo.",
       "error"
     );
+  } else {
+    setStatus("Faça upload de um vídeo para capturar o frame no servidor.", "info");
   }
 })();

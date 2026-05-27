@@ -5,7 +5,7 @@
   <h2>Polígonos de zona — {{ camera.camera_id }}</h2>
   <p class="hint">
     Tipo: <strong>{{ role_label }}</strong> ·
-    Vídeo: <code>{{ video_relpath }}</code> ·
+    Frame salvo no servidor (sem depender do MP4 local) ·
     Loja: <strong>{{ store.name }}</strong>
   </p>
 
@@ -42,7 +42,7 @@
       {% endif %}
       <div class="form-row">
         <label>&nbsp;</label>
-        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available %} disabled{% endif %}>
+        <button type="button" class="btn btn-secondary" id="capture-frame"{% if not video_available and not saved_frame_available %} disabled{% endif %}>
           Capturar frame
         </button>
       </div>
@@ -83,10 +83,12 @@
   </div>
 
   <div class="roi-status" id="zone-status">
-    {% if video_available %}
-      Carregando frame…
+    {% if saved_frame_available %}
+      Carregando frame salvo no servidor…
+    {% elif video_available %}
+      Vídeo disponível — clique em Capturar frame para salvar a imagem no servidor.
     {% else %}
-      Vídeo não encontrado em {{ video_relpath }}. Copie o MP4 ou faça upload.
+      Vídeo não encontrado{% if video_relpath %} em {{ video_relpath }}{% endif %}. Faça upload ou use um frame já salvo.
     {% endif %}
   </div>
 
@@ -118,9 +120,11 @@
     videoAvailable: {{ video_available | tojson }},
     videoRelpath: {{ video_relpath | tojson }},
     videoDuration: {{ video_duration | tojson if video_duration is not none else 'null' }},
+    savedFrameAvailable: {{ saved_frame_available | tojson }},
+    savedFrameUrl: {{ saved_frame_url | tojson }},
     existingZones: {{ existing_zones | tojson }},
     r1MinCheckoutDurationSec: {{ store.r1_min_checkout_duration_sec }},
   };
 </script>
-<script src="/static/zone_editor.js?v=5"></script>
+<script src="/static/zone_editor.js?v=9"></script>
 {% endblock %}

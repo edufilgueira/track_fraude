@@ -101,6 +101,37 @@ Acesse o painel: **[http://127.0.0.1:8080/login](http://127.0.0.1:8080/login)** 
 
 Próximo passo: **Fase 4** — merge cam1+cam2 e re-identificação.
 
+## Fase 4 — Re-ID cross-camera
+
+Requer `tracks.parquet` da **cam1 (entrada)** e **cam2 (caixa)**.
+
+```powershell
+# 1. Sync + track nas duas câmeras (se ainda não rodou)
+python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+
+# 2. Eventos (cam1 + cam2) — opcional antes do merge; melhora horário de entrada
+python jobs/run_events.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_events.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+
+# 3. Merge Re-ID → global_person_id
+python jobs/run_merge.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+# Só temporal (rápido):  ... --skip-appearance
+
+# 4. POS + alertas (timelines já enriquecido com global_person_id)
+python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code default --pos-api-url http://127.0.0.1:3099
+python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+```
+
+Saídas em `data/processed/{group}/{store}/{date}/`:
+
+- `merge/persons.json` — `global_person_id` + tracks por câmera
+- `merge/cross_camera_links.json` — pares cam1↔cam2 com score
+- `events/timelines.json` — tracks com `global_person_id` (após merge)
+- `alerts/index.json` — R1 inclui `global_person_id` e `store_timeline` (cam1)
+
 ## Fase 3 — Zonas, eventos e R1
 
 Requer Fase 2 (`tracks.parquet`) e polígonos cadastrados no **painel web** (SQLite — `camera_zones`).
@@ -164,7 +195,7 @@ python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id 
 
 python jobs/validate_sync_pos.py --date 2026-05-22 --camera cam2 --frame 6550 --store-id LOJA-01 --group-code default
 
-# Fase 3
+<!-- # Fase 3
 
 ```powershell
 # 1. Zonas no painel web (zone-editor) ou fallback JSON acima
@@ -176,4 +207,15 @@ python tools/render_zone_overlay.py --date 2026-05-22 --camera cam2 --store-id L
 python jobs/run_events.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code default --pos-api-url http://127.0.0.1:3099
 python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+``` -->
+
+
+# Fase 4
+```powershell
+python jobs/run_events.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_events.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+python jobs/run_merge.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code default --pos-api-url http://127.0.0.1:3099
+python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 ```
+

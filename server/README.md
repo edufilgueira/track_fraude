@@ -17,7 +17,7 @@ Interface para **cadastro e configuração** — roda separado da máquina de pr
 ## Dependências
 
 Este pacote é **independente**: FastAPI, Jinja2, Uvicorn + `track-fraude-core` (SQLite).  
-O editor de ROI usa o seletor de arquivo do navegador; se o codec não for reproduzível no browser (ex.: `mp4v`), o frame é extraído no servidor via OpenCV headless.
+O editor de ROI/zona salva o **frame capturado no servidor** em `server/upload/editor_frames/{loja}/{camera_db_id}/frame.jpg` (ex.: `1/1/frame.jpg`), acessível de qualquer dispositivo. Toda a pasta `server/upload/` pode ser copiada junto com o painel para outro servidor. Frames antigos em `data/editor_frames/` (legado) são migrados automaticamente para `server/upload/` na subida do app. O MP4 em `data/raw/video/` **não é removido** — continua disponível para o pipeline de processamento.
 
 ## Configuração
 
@@ -30,7 +30,7 @@ Edite `config/settings.yaml`:
 | `app.secret_key` | Troque em produção |
 | `app.host` / `app.port` | Bind do Uvicorn |
 
-Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `server/` + `core/`, ajuste `database.path` para o SQLite acessível na rede e execute normalmente.
+Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `server/` (incluindo `server/upload/editor_frames/`) + `core/`, ajuste `database.path` para o SQLite acessível na rede e execute normalmente.
 
 ## Executar
 
