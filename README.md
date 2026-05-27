@@ -99,7 +99,33 @@ Validação com vídeo real continua manual (sync → track → events → alert
 
 Acesse o painel: **[http://127.0.0.1:8080/login](http://127.0.0.1:8080/login)** (`admin` / `admin123` — altere em `server/config/settings.yaml`)
 
-Próximo passo: **Fase 4** — merge cam1+cam2 e re-identificação.
+Próximo passo: **Fase 5** — pacotes de evidência (clips por alerta).
+
+## Fase 5 — Pacotes de evidência (clips)
+
+Requer alertas R1 (`run_alerts.py`) e vídeos em `data/raw/video/{date}/` (ou `manifest.json` com chunks).
+
+```powershell
+python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+# Só JSON/summary (sem FFmpeg):  ... --skip-clips
+# Ajustar janela:  ... --buffer-before 20 --buffer-after 20 --max-duration 300
+```
+
+Requer **FFmpeg** no PATH para gerar os MP4.
+
+Saídas em `data/review/{group}/{store}/{date}/`:
+
+```text
+alerts/AL-20260522-0001/
+  timeline.json
+  pos_context.json
+  summary.txt
+  cam1_clip.mp4
+  cam2_clip.mp4
+  cam2_checkout_clip.mp4   ← foco na sessão de caixa
+  evidence.json
+index.json                 ← alertas + caminhos das evidências
+```
 
 ## Fase 4 — Re-ID cross-camera
 
@@ -123,6 +149,9 @@ python jobs/run_merge.py --date 2026-05-22 --store-id LOJA-01 --group-code defau
 # 4. POS + alertas (timelines já enriquecido com global_person_id)
 python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code default --pos-api-url http://127.0.0.1:3099
 python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+
+# 5. Evidências (clips cam1 + cam2 por alerta)
+python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 ```
 
 Saídas em `data/processed/{group}/{store}/{date}/`:
@@ -219,3 +248,7 @@ python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code d
 python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 ```
 
+# Fase 5
+```powershell
+python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+```

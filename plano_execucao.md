@@ -209,7 +209,7 @@ Revisor recebe **timeline + clips cam1/cam2** por alerta, não o dia inteiro.
 - Estrutura por alerta:
 
 ```text
-data/output/{group_code}/{store_id}/{date}/alerts/AL-XXXX/
+data/review/{group_code}/{store_id}/{date}/alerts/AL-XXXX/
   timeline.json
   pos_context.json
   summary.txt
@@ -225,6 +225,15 @@ data/output/{group_code}/{store_id}/{date}/alerts/AL-XXXX/
 
 ### Dependências
 Fase 4 (persons + alertas).
+
+
+### Checklist Fase 5
+
+1. Aumentar --max-duration (solução direta)
+O que --max-duration limita
+Limita a janela total do clip principal, usada nas duas câmeras (cam1_clip.mp4 e cam2_clip.mp4 com o mesmo intervalo):
+2. Definir uma tela para reduzir os tamanhos dos arquivos gerados para o revisor
+3. O buffer de 20s esta sendo aplicado tanto no caixa quanto na estrada do video. Verificar se deve separar
 
 ---
 

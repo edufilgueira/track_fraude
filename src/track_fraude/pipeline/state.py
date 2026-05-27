@@ -61,3 +61,7 @@ def alerts_phase_status(state: dict[str, Any]) -> str:
 
 def merge_phase_status(state: dict[str, Any]) -> str:
     return str(state.get("phases", {}).get("merge", {}).get("status", "pending"))
+
+
+def evidence_phase_status(state: dict[str, Any]) -> str:
+    return str(state.get("phases", {}).get("evidence", {}).get("status", "pending"))

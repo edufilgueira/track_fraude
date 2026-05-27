@@ -5,6 +5,7 @@ from pathlib import Path
 
 DEFAULT_PROCESSED_DIR = Path("data/processed")
 DEFAULT_OUTPUT_DIR = Path("data/output")
+DEFAULT_REVIEW_DIR = Path("data/review")
 
 
 def processed_root(project_root: Path | str) -> Path:
@@ -15,6 +16,11 @@ def processed_root(project_root: Path | str) -> Path:
 def output_root(project_root: Path | str) -> Path:
     """Raiz dos entregáveis finais (alertas, clips, índices para revisão)."""
     return Path(project_root) / DEFAULT_OUTPUT_DIR
+
+
+def review_root(project_root: Path | str) -> Path:
+    """Pacotes de evidência para revisão humana (Fase 5)."""
+    return Path(project_root) / DEFAULT_REVIEW_DIR
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,20 @@ class ProcessedScope(StoreScope):
 
     def cross_camera_links_path(self, date: str) -> Path:
         return self.merge_dir(date) / "cross_camera_links.json"
+
+
+@dataclass(frozen=True)
+class ReviewScope(StoreScope):
+    """Pacotes de evidência por alerta em data/review/."""
+
+    def alerts_dir(self, date: str) -> Path:
+        return self.date_dir(date) / "alerts"
+
+    def alert_dir(self, date: str, alert_id: str) -> Path:
+        return self.alerts_dir(date) / alert_id
+
+    def review_index_path(self, date: str) -> Path:
+        return self.date_dir(date) / "index.json"
 
 
 @dataclass(frozen=True)

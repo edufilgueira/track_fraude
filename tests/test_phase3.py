@@ -412,30 +412,22 @@ def test_portal_alternating_enter_and_leave():
 
     enter_rows = _track_rows_at_foot(
         track_id=1,
-        foot_x=150,
+        foot_x=15,
         foot_y=500,
         t_start=t0,
-        duration_sec=5,
-        drift=(0.0, 10.0),
+        duration_sec=8,
+        drift=(12.0, 0.0),
     )
     outside_rows = _track_rows_at_foot(
         track_id=1,
         foot_x=15,
         foot_y=500,
-        t_start=t0 + timedelta(seconds=10),
-        duration_sec=5,
-    )
-    leave_rows = _track_rows_at_foot(
-        track_id=1,
-        foot_x=150,
-        foot_y=620,
-        t_start=t0 + timedelta(seconds=20),
-        duration_sec=5,
-        drift=(0.0, -10.0),
+        t_start=t0 + timedelta(seconds=15),
+        duration_sec=8,
     )
 
     timeline = build_store_timeline_for_track(
-        enter_rows + outside_rows + leave_rows,
+        enter_rows + outside_rows,
         camera_zones,
         hysteresis_sec=3.0,
     )
@@ -455,30 +447,22 @@ def test_portal_direction_with_entry_vector():
 
     enter_rows = _track_rows_at_foot(
         track_id=2,
-        foot_x=150,
-        foot_y=480,
+        foot_x=15,
+        foot_y=350,
         t_start=t0,
-        duration_sec=5,
-        drift=(0.0, 15.0),
+        duration_sec=8,
+        drift=(10.0, 18.0),
     )
     outside_rows = _track_rows_at_foot(
         track_id=2,
         foot_x=15,
         foot_y=500,
-        t_start=t0 + timedelta(seconds=10),
-        duration_sec=5,
-    )
-    leave_rows = _track_rows_at_foot(
-        track_id=2,
-        foot_x=150,
-        foot_y=620,
-        t_start=t0 + timedelta(seconds=20),
-        duration_sec=5,
-        drift=(0.0, -15.0),
+        t_start=t0 + timedelta(seconds=15),
+        duration_sec=8,
     )
 
     timeline = build_store_timeline_for_track(
-        enter_rows + outside_rows + leave_rows,
+        enter_rows + outside_rows,
         camera_zones,
         hysteresis_sec=3.0,
     )
@@ -507,28 +491,60 @@ def test_same_entrance_exit_polygon_uses_portal_mode():
     t0 = datetime(2026, 5, 22, 8, 0, 0)
     enter_rows = _track_rows_at_foot(
         track_id=3,
-        foot_x=150,
+        foot_x=15,
         foot_y=500,
         t_start=t0,
-        duration_sec=5,
+        duration_sec=8,
+        drift=(12.0, 0.0),
     )
     outside_rows = _track_rows_at_foot(
         track_id=3,
         foot_x=15,
         foot_y=500,
-        t_start=t0 + timedelta(seconds=10),
-        duration_sec=5,
-    )
-    leave_rows = _track_rows_at_foot(
-        track_id=3,
-        foot_x=150,
-        foot_y=550,
-        t_start=t0 + timedelta(seconds=20),
-        duration_sec=5,
+        t_start=t0 + timedelta(seconds=15),
+        duration_sec=8,
     )
     timeline = build_store_timeline_for_track(
-        enter_rows + outside_rows + leave_rows,
+        enter_rows + outside_rows,
         camera_zones,
         hysteresis_sec=3.0,
     )
     assert [item["event"] for item in timeline] == ["entered", "left"]
+
+
+def test_portal_track_starts_inside_infers_entered_before_left():
+    """Track já dentro do portal (YOLO pegou tarde) → inferir entered ao sair."""
+    portal = ZonePolygon(
+        zone_id="portal",
+        label="Porta",
+        polygon=PORTAL_POLYGON,
+        entry_vector=[0.0, 1.0],
+    )
+    camera_zones = CameraZones(camera_id="cam1", portal=portal)
+    t0 = datetime(2026, 5, 22, 10, 0, 24)
+
+    inside_rows = _track_rows_at_foot(
+        track_id=5,
+        foot_x=150,
+        foot_y=500,
+        t_start=t0,
+        duration_sec=35,
+        step_sec=0.5,
+    )
+    outside_rows = _track_rows_at_foot(
+        track_id=5,
+        foot_x=15,
+        foot_y=500,
+        t_start=t0 + timedelta(seconds=40),
+        duration_sec=5,
+        drift=(0.0, -15.0),
+    )
+
+    timeline = build_store_timeline_for_track(
+        inside_rows + outside_rows,
+        camera_zones,
+        hysteresis_sec=3.0,
+    )
+    events = [item["event"] for item in timeline]
+    assert events == ["entered", "left"]
+    assert timeline[0].get("inferred") is True

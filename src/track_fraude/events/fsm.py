@@ -290,8 +290,43 @@ class PortalFSM:
     status: str = "outside"
     pending_since: datetime | None = None
     next_event: str = "entered"
+    saw_outside: bool = False
+    first_inside_at: datetime | None = None
     approach_points: list[tuple[float, float]] = field(default_factory=list)
     timeline: list[dict[str, Any]] = field(default_factory=list)
+
+    def _has_entered(self) -> bool:
+        return any(item.get("event") == "entered" for item in self.timeline)
+
+    def _mark_first_inside(self, t: datetime) -> None:
+        if self.first_inside_at is None:
+            self.first_inside_at = t
+
+    def _append_portal_event(self, event: str, t: datetime) -> None:
+        if event == "left" and not self._has_entered():
+            self._infer_entered_before(t)
+        self.timeline.append(
+            {
+                "event": event,
+                "t": t.isoformat(),
+                "zone_id": self.portal.zone_id,
+                "mode": "portal",
+            }
+        )
+
+    def _infer_entered_before(self, before_t: datetime) -> None:
+        if self._has_entered():
+            return
+        entered_at = self.first_inside_at or before_t
+        self.timeline.append(
+            {
+                "event": "entered",
+                "t": entered_at.isoformat(),
+                "zone_id": self.portal.zone_id,
+                "mode": "portal",
+                "inferred": True,
+            }
+        )
 
     def update(self, x: float, y: float, t: datetime) -> None:
         inside = point_in_polygon(x, y, self.portal.polygon)
@@ -305,25 +340,25 @@ class PortalFSM:
             self.status = "pending_enter"
             self.pending_since = t
             self.approach_points = [(x, y)]
+            self._mark_first_inside(t)
             return
 
         if self.status == "pending_enter":
             self.approach_points.append((x, y))
             assert self.pending_since is not None
             if (t - self.pending_since).total_seconds() >= self.hysteresis_sec:
+                if not self.saw_outside:
+                    self.status = "inside"
+                    self.pending_since = None
+                    self.approach_points.clear()
+                    return
+
                 event = _classify_portal_crossing(
                     _motion_vector(self.approach_points),
                     entry_vector=self.portal.entry_vector,
                     next_event=self.next_event,
                 )
-                self.timeline.append(
-                    {
-                        "event": event,
-                        "t": self.pending_since.isoformat(),
-                        "zone_id": self.portal.zone_id,
-                        "mode": "portal",
-                    }
-                )
+                self._append_portal_event(event, self.pending_since)
                 self.next_event = "left" if event == "entered" else "entered"
                 self.status = "inside"
                 self.pending_since = None
@@ -336,6 +371,7 @@ class PortalFSM:
 
     def _apply_outside(self, t: datetime) -> None:
         if self.status == "outside":
+            self.saw_outside = True
             return
 
         if self.status == "pending_enter":
@@ -352,6 +388,8 @@ class PortalFSM:
         if self.status == "pending_exit":
             assert self.pending_since is not None
             if (t - self.pending_since).total_seconds() >= self.hysteresis_sec:
+                self._append_portal_event("left", self.pending_since)
+                self.next_event = "entered"
                 self.status = "outside"
                 self.pending_since = None
 
@@ -363,6 +401,18 @@ class PortalFSM:
         elif self.status == "pending_exit":
             self.status = "outside"
             self.pending_since = None
+
+        has_left = any(item.get("event") == "left" for item in self.timeline)
+        if not self._has_entered() and self.first_inside_at is not None and not has_left:
+            self.timeline.append(
+                {
+                    "event": "entered",
+                    "t": self.first_inside_at.isoformat(),
+                    "zone_id": self.portal.zone_id,
+                    "mode": "portal",
+                    "inferred": True,
+                }
+            )
 
 
 def build_checkout_sessions_for_track(
