@@ -155,7 +155,6 @@ async def create_store_in_group(
     timezone: str = Form("America/Sao_Paulo"),
     ocr_sample_interval_sec: int = Form(30),
     ocr_min_confidence: float = Form(0.5),
-    pos_match_delta_sec: int = Form(60),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     group_repo = get_group_repo()
@@ -183,7 +182,6 @@ async def create_store_in_group(
         timezone=timezone,
         ocr_sample_interval_sec=ocr_sample_interval_sec,
         ocr_min_confidence=ocr_min_confidence,
-        pos_match_delta_sec=pos_match_delta_sec,
         active=active == "on",
     )
     return RedirectResponse(

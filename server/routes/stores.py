@@ -42,6 +42,77 @@ async def store_detail(request: Request, store_db_id: int) -> HTMLResponse:
     )
 
 
+@router.get("/{store_db_id}/rules", response_class=HTMLResponse)
+async def store_rules_form(request: Request, store_db_id: int) -> HTMLResponse:
+    store_repo = get_store_repo()
+    store = store_repo.get_store(store_db_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+
+    group = get_group_repo().get_group(store.group_db_id)
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "stores/rules.html",
+        {
+            "store": store,
+            "group": group,
+            "message": request.query_params.get("msg"),
+        },
+    )
+
+
+@router.post("/{store_db_id}/rules")
+async def update_store_rules(
+    store_db_id: int,
+    r1_min_checkout_duration_sec: float = Form(...),
+    pos_match_delta_sec: int = Form(...),
+    t_return_sec: float = Form(...),
+    carry_confidence_threshold: float = Form(...),
+    r3_visual_margin: int = Form(...),
+    r4_min_items: int = Form(...),
+    r4_fast_duration_sec: float = Form(...),
+    r5_cancelled_delta_sec: int = Form(...),
+    buffer_before_sec: float = Form(...),
+    buffer_after_sec: float = Form(...),
+    checkout_buffer_before_sec: float = Form(...),
+    checkout_buffer_after_sec: float = Form(...),
+    enable_r4: str | None = Form(None),
+) -> RedirectResponse:
+    store_repo = get_store_repo()
+    store = store_repo.get_store(store_db_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+
+    if not (1 <= r1_min_checkout_duration_sec <= 3600):
+        raise HTTPException(status_code=400, detail="Tempo mínimo R1 inválido (1–3600 s)")
+    if pos_match_delta_sec < 0:
+        raise HTTPException(status_code=400, detail="Delta POS inválido")
+    if not (0 <= carry_confidence_threshold <= 1):
+        raise HTTPException(status_code=400, detail="Confiança visual inválida (0–1)")
+
+    store_repo.update_store(
+        store_db_id,
+        r1_min_checkout_duration_sec=float(r1_min_checkout_duration_sec),
+        pos_match_delta_sec=int(pos_match_delta_sec),
+        t_return_sec=float(t_return_sec),
+        carry_confidence_threshold=float(carry_confidence_threshold),
+        r3_visual_margin=int(r3_visual_margin),
+        r4_min_items=int(r4_min_items),
+        r4_fast_duration_sec=float(r4_fast_duration_sec),
+        r5_cancelled_delta_sec=int(r5_cancelled_delta_sec),
+        buffer_before_sec=float(buffer_before_sec),
+        buffer_after_sec=float(buffer_after_sec),
+        checkout_buffer_before_sec=float(checkout_buffer_before_sec),
+        checkout_buffer_after_sec=float(checkout_buffer_after_sec),
+        enable_r4=enable_r4 == "on",
+    )
+    return RedirectResponse(
+        url=f"/stores/{store_db_id}/rules?msg=Regras+atualizadas",
+        status_code=303,
+    )
+
+
 @router.get("/{store_db_id}/edit", response_class=HTMLResponse)
 async def edit_store_form(request: Request, store_db_id: int) -> HTMLResponse:
     store_repo = get_store_repo()
@@ -76,7 +147,6 @@ async def update_store(
     timezone: str = Form("America/Sao_Paulo"),
     ocr_sample_interval_sec: int = Form(30),
     ocr_min_confidence: float = Form(0.5),
-    pos_match_delta_sec: int = Form(60),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     store_repo = get_store_repo()
@@ -104,7 +174,6 @@ async def update_store(
         timezone=timezone.strip(),
         ocr_sample_interval_sec=ocr_sample_interval_sec,
         ocr_min_confidence=ocr_min_confidence,
-        pos_match_delta_sec=pos_match_delta_sec,
         active=active == "on",
     )
     return RedirectResponse(

@@ -18,10 +18,11 @@
   <p class="hint">
     Timezone: {{ store.timezone }} ·
     OCR a cada {{ store.ocr_sample_interval_sec }}s ·
-    Delta POS: {{ store.pos_match_delta_sec }}s
+    <a href="/stores/{{ store.id }}/rules">Regras de alerta (R1–R5)</a>
   </p>
   <div class="actions" style="margin-top:12px">
     <a class="btn" href="/stores/{{ store.id }}/cameras/new">+ Câmera</a>
+    <a class="btn btn-secondary" href="/stores/{{ store.id }}/rules">Regras</a>
     <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Voltar</a>
   </div>
 </div>

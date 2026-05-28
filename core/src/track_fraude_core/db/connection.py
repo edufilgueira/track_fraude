@@ -29,8 +29,19 @@ CREATE TABLE IF NOT EXISTS stores (
     timezone TEXT NOT NULL DEFAULT 'America/Sao_Paulo',
     ocr_sample_interval_sec INTEGER NOT NULL DEFAULT 30,
     ocr_min_confidence REAL NOT NULL DEFAULT 0.5,
-    pos_match_delta_sec INTEGER NOT NULL DEFAULT 60,
-    r1_min_checkout_duration_sec REAL NOT NULL DEFAULT 60,
+    pos_match_delta_sec INTEGER NOT NULL DEFAULT 20,
+    r1_min_checkout_duration_sec REAL NOT NULL DEFAULT 20,
+    t_return_sec REAL NOT NULL DEFAULT 1800,
+    r3_visual_margin INTEGER NOT NULL DEFAULT 2,
+    carry_confidence_threshold REAL NOT NULL DEFAULT 0.55,
+    r4_min_items INTEGER NOT NULL DEFAULT 5,
+    r4_fast_duration_sec REAL NOT NULL DEFAULT 90,
+    enable_r4 INTEGER NOT NULL DEFAULT 1,
+    r5_cancelled_delta_sec INTEGER NOT NULL DEFAULT 60,
+    buffer_before_sec REAL NOT NULL DEFAULT 20,
+    buffer_after_sec REAL NOT NULL DEFAULT 20,
+    checkout_buffer_before_sec REAL NOT NULL DEFAULT 5,
+    checkout_buffer_after_sec REAL NOT NULL DEFAULT 5,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -171,8 +182,27 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
     if "r1_min_checkout_duration_sec" not in store_columns:
         conn.execute(
             "ALTER TABLE stores ADD COLUMN r1_min_checkout_duration_sec "
-            "REAL NOT NULL DEFAULT 60"
+            "REAL NOT NULL DEFAULT 20"
         )
+
+    store_columns = _column_names(conn, "stores")
+    rule_column_migrations: list[tuple[str, str]] = [
+        ("t_return_sec", "REAL NOT NULL DEFAULT 1800"),
+        ("r3_visual_margin", "INTEGER NOT NULL DEFAULT 2"),
+        ("carry_confidence_threshold", "REAL NOT NULL DEFAULT 0.55"),
+        ("r4_min_items", "INTEGER NOT NULL DEFAULT 5"),
+        ("r4_fast_duration_sec", "REAL NOT NULL DEFAULT 90"),
+        ("enable_r4", "INTEGER NOT NULL DEFAULT 1"),
+        ("r5_cancelled_delta_sec", "INTEGER NOT NULL DEFAULT 60"),
+        ("buffer_before_sec", "REAL NOT NULL DEFAULT 20"),
+        ("buffer_after_sec", "REAL NOT NULL DEFAULT 20"),
+        ("checkout_buffer_before_sec", "REAL NOT NULL DEFAULT 5"),
+        ("checkout_buffer_after_sec", "REAL NOT NULL DEFAULT 5"),
+    ]
+    for column, ddl in rule_column_migrations:
+        if column not in store_columns:
+            conn.execute(f"ALTER TABLE stores ADD COLUMN {column} {ddl}")
+            store_columns.add(column)
 
 
 def _migrate_cameras_and_zones(conn: sqlite3.Connection) -> None:

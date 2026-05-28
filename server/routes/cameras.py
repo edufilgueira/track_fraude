@@ -50,10 +50,6 @@ class EntryVectorPayload(BaseModel):
     entry_vector: list[float]
 
 
-class R1MinDurationPayload(BaseModel):
-    r1_min_checkout_duration_sec: float = Field(gt=0, le=3600)
-
-
 def _get_camera_or_404(store_db_id: int, camera_db_id: int):
     repo = get_store_repo()
     store = repo.get_store(store_db_id)
@@ -494,28 +490,6 @@ async def save_zone_entry_vector(
         sort_order=0,
     )
     return JSONResponse({"ok": True, "zone": zone.to_dict()})
-
-
-@router.post("/{store_db_id}/r1-min-checkout-duration")
-async def save_r1_min_checkout_duration(
-    store_db_id: int,
-    payload: R1MinDurationPayload,
-) -> JSONResponse:
-    repo = get_store_repo()
-    store = repo.get_store(store_db_id)
-    if not store:
-        raise HTTPException(status_code=404, detail="Loja não encontrada")
-    updated = repo.update_store(
-        store_db_id,
-        r1_min_checkout_duration_sec=payload.r1_min_checkout_duration_sec,
-    )
-    assert updated is not None
-    return JSONResponse(
-        {
-            "ok": True,
-            "r1_min_checkout_duration_sec": updated.r1_min_checkout_duration_sec,
-        }
-    )
 
 
 @router.delete("/{store_db_id}/cameras/{camera_db_id}/zones/{zone_id}")

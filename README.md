@@ -99,11 +99,39 @@ Validação com vídeo real continua manual (sync → track → events → alert
 
 Acesse o painel: **[http://127.0.0.1:8080/login](http://127.0.0.1:8080/login)** (`admin` / `admin123` — altere em `server/config/settings.yaml`)
 
-Próximo passo: **Fase 5** — pacotes de evidência (clips por alerta).
+Próximo passo: **Fase 7** — pipeline batch diário (`run_daily_pipeline.py`); depois **Fase 7b** — YOLO só em trechos com movimento.
+
+## Fase 6 — Regras completas (R1–R5)
+
+Requer timelines enriquecidos (`run_events.py`, `run_merge.py`, `run_pos_match.py`).
+
+```powershell
+# Opcional: proxy visual de carga (bbox cam1 → vision_signals)
+python jobs/run_vision.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+
+python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+# R1b: janela de retorno ao caixa (default 30 min)
+# ... --t-return-sec 1800
+```
+
+| Regra | Cenário |
+|-------|---------|
+| **R1** | Ficou no caixa sem venda |
+| **R1b** | Suprime R1 se voltou ao mesmo caixa e pagou dentro de `T_return` |
+| **R2** | Entrou **sem passar no caixa**, zero POS, saiu com **carga líquida** acima da entrada |
+| **R3** | POS registrou menos itens que estimativa visual |
+| **R4** | Muitos itens POS em tempo curto no caixa |
+| **R5** | Transação cancelada + saída com indício de carga |
+
+Cada alerta inclui `suspicion_score`, `vision_signals` (quando disponível) e `severity`. R2/R5 exigem `left` na timeline da loja (mesma visita).
+
+Quando **R1 e R2** disparam na **mesma visita**, o motor gera **um único alerta** (`rule_id: R1+R2`). Com R2 restrita a skip checkout, isso raramente ocorre — **R1** cobre quem passou no caixa; **R2** cobre quem **nunca** entrou na zona de caixa.
+
+**Carga (baseline):** na entrada registra `carry_baseline` (mãos vazias/objetos); na saída compara delta **líquido** (`net_objects`, `net_score`) — entrou vazio e saiu vazio → sem R2.
 
 ## Fase 5 — Pacotes de evidência (clips)
 
-Requer alertas R1 (`run_alerts.py`) e vídeos em `data/raw/video/{date}/` (ou `manifest.json` com chunks).
+Requer alertas (`run_alerts.py`) e vídeos em `data/raw/video/{date}/` (ou `manifest.json` com chunks).
 
 ```powershell
 python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
@@ -159,7 +187,7 @@ Saídas em `data/processed/{group}/{store}/{date}/`:
 - `merge/persons.json` — `global_person_id` + tracks por câmera
 - `merge/cross_camera_links.json` — pares cam1↔cam2 com score
 - `events/timelines.json` — tracks com `global_person_id` (após merge)
-- `alerts/index.json` — R1 inclui `global_person_id` e `store_timeline` (cam1)
+- `alerts/index.json` — R1–R5 com `global_person_id`, `store_timeline`, `suspicion_score`
 
 ## Fase 3 — Zonas, eventos e R1
 
@@ -193,7 +221,7 @@ curl "http://127.0.0.1:3099/transactions?store_id=LOJA-01&date=2026-05-22&t_from
 Saídas anteriores do pipeline:
 
 - `data/processed/{group}/{store}/{date}/events/timelines.json` — `checkout_sessions[]`, `entered`/`left` (cam1)
-- `data/processed/{group}/{store}/{date}/alerts/index.json` — alertas **R1** (ficou no caixa sem venda)
+- `data/processed/{group}/{store}/{date}/alerts/index.json` — alertas **R1–R5**
 
 **R1:** duração no caixa acima do tempo mínimo configurado no **zone-editor** da câmera de caixa (`r1_min_checkout_duration_sec`, default 60 s) e zero transação POS em `[t_start ± δ, t_end ± δ]` na mesma `lane_id`.  
 δ vem de `pos_match_delta_sec` da loja (SQLite, default 60 s).
@@ -250,5 +278,29 @@ python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code defa
 
 # Fase 5
 ```powershell
+python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+```
+
+
+# Fase 6
+```powershell
+### Cam1 (caixa):
+python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
+python tools/render_track_overlay.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+### Cam2 (caixa):
+python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+# Validar sync ↔ POS (cam2, se tiver POS alinhado):
+python jobs/validate_sync_pos.py --date 2026-05-22 --camera cam2 --frame 6550 --store-id LOJA-01 --group-code default
+# Eventos
+python jobs/run_events.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_events.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
+python jobs/run_merge.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+python jobs/run_pos_match.py --date 2026-05-22 --store-id LOJA-01 --group-code default --pos-api-url http://127.0.0.1:3099
+python jobs/run_vision.py --date 2026-05-22 --store-id LOJA-01 --group-code default  # opcional
+python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+# Produzir evidencias
 python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 ```

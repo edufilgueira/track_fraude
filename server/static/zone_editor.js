@@ -22,7 +22,6 @@
   const addLaneBtn = document.getElementById("add-lane");
   const deleteLaneBtn = document.getElementById("delete-lane");
   const labelInput = document.getElementById("zone-label");
-  const r1MinInput = document.getElementById("r1-min-duration-sec");
 
   const LANE_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#fb923c"];
   const isCheckout = config.cameraRole === "checkout";
@@ -443,28 +442,6 @@
     setStatus("Sentido de entrada salvo.", "success");
   }
 
-  async function saveR1MinDuration() {
-    if (!r1MinInput) return;
-    const value = parseFloat(r1MinInput.value);
-    if (!Number.isFinite(value) || value <= 0 || value > 3600) {
-      setStatus("Tempo mínimo R1 inválido (1–3600 s).", "error");
-      return;
-    }
-    const url = "/stores/" + config.storeId + "/r1-min-checkout-duration";
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ r1_min_checkout_duration_sec: value }),
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || "Falha ao salvar tempo mínimo R1");
-    }
-    const data = await response.json();
-    r1MinInput.value = String(Math.round(data.r1_min_checkout_duration_sec));
-    setStatus("Tempo mínimo R1 salvo: " + r1MinInput.value + " s", "success");
-  }
-
   function onStageClick(event) {
     if (!frameSize.width) return;
     event.preventDefault();
@@ -741,13 +718,6 @@
       if (!isCheckout) return;
       laneLabels[activeLaneId] = labelInput.value.trim() || ("Caixa " + activeLaneId);
       renderLaneTabs();
-    });
-  }
-  if (r1MinInput) {
-    r1MinInput.addEventListener("change", function () {
-      saveR1MinDuration().catch(function (err) {
-        setStatus("Erro: " + err.message, "error");
-      });
     });
   }
   fileInput.addEventListener("change", function () {

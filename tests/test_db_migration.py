@@ -75,3 +75,24 @@ def test_migrate_legacy_database_without_group_db_id(tmp_path: Path):
     assert "group_db_id" in columns
     assert "street" in columns
     assert "r1_min_checkout_duration_sec" in columns
+    assert "t_return_sec" in columns
+    assert "r5_cancelled_delta_sec" in columns
+    assert "buffer_before_sec" in columns
+    assert "checkout_buffer_after_sec" in columns
+
+
+def test_new_store_gets_alert_rule_defaults(tmp_path: Path):
+    db_path = tmp_path / "rules_defaults.db"
+    init_database(db_path)
+    group_repo = GroupRepository(db_path)
+    store_repo = StoreRepository(db_path)
+    group = group_repo.create_group(group_code="test", name="Test")
+    store = store_repo.create_store(group_db_id=group.id, store_id="LOJA-X", name="Loja X")
+    assert store.r1_min_checkout_duration_sec == 20
+    assert store.pos_match_delta_sec == 20
+    assert store.t_return_sec == 1800
+    assert store.r5_cancelled_delta_sec == 60
+    assert store.buffer_before_sec == 20
+    assert store.buffer_after_sec == 20
+    assert store.checkout_buffer_before_sec == 5
+    assert store.checkout_buffer_after_sec == 5

@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Regras — {{ store.name }}{% endblock %}
+{% block content %}
+<div class="rules-page">
+  <div class="card rules-header-card">
+    <div class="rules-header-top">
+      <div>
+        <h2>Regras de alerta</h2>
+        <p class="hint rules-subtitle">
+          {{ store.name }} · <strong>{{ store.store_id }}</strong>
+          {% if group %} · {{ group.name }}{% endif %}
+        </p>
+      </div>
+      <div class="actions">
+        {% if group %}
+        <a class="btn btn-secondary" href="/groups/{{ group.id }}">Grupo</a>
+        {% endif %}
+        <a class="btn btn-secondary" href="/stores/{{ store.id }}">Loja</a>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" action="/stores/{{ store.id }}/rules" class="rules-form">
+    <section class="rules-global-panel">
+      <div class="rules-global-head">
+        <span class="rules-global-icon" aria-hidden="true">▶</span>
+        <div>
+          <h3>Recorte de vídeo (evidência)</h3>
+          <p class="hint">Usado por <code>run_evidence.py</code> — não faz parte das regras R1–R5.</p>
+        </div>
+      </div>
+      <div class="rules-fields-row rules-fields-row-4">
+        <div class="form-row">
+          <label for="buffer_before_sec" class="label-with-tip">
+            Buffer antes (s)
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: buffer antes"
+              data-tip="Segundos antes do instante mais cedo do alerta (entered, left, checkout) ao gerar cam1_clip e cam2_clip. Default: 20 s.">?</span>
+          </label>
+          <input type="number" id="buffer_before_sec" name="buffer_before_sec"
+                 min="0" max="600" step="1" required value="{{ store.buffer_before_sec | int }}">
+        </div>
+        <div class="form-row">
+          <label for="buffer_after_sec" class="label-with-tip">
+            Buffer depois (s)
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: buffer depois"
+              data-tip="Segundos depois do instante mais tarde do alerta nos clips completos cam1/cam2. Default: 20 s.">?</span>
+          </label>
+          <input type="number" id="buffer_after_sec" name="buffer_after_sec"
+                 min="0" max="600" step="1" required value="{{ store.buffer_after_sec | int }}">
+        </div>
+        <div class="form-row">
+          <label for="checkout_buffer_before_sec" class="label-with-tip">
+            Checkout antes (s)
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: checkout buffer antes"
+              data-tip="Segundos antes de t_start da sessão no clip curto cam2_checkout_clip. Default: 5 s.">?</span>
+          </label>
+          <input type="number" id="checkout_buffer_before_sec" name="checkout_buffer_before_sec"
+                 min="0" max="300" step="1" required
+                 value="{{ store.checkout_buffer_before_sec | int }}">
+        </div>
+        <div class="form-row">
+          <label for="checkout_buffer_after_sec" class="label-with-tip">
+            Checkout depois (s)
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: checkout buffer depois"
+              data-tip="Segundos depois de t_end da sessão no clip curto do caixa. Default: 5 s.">?</span>
+          </label>
+          <input type="number" id="checkout_buffer_after_sec" name="checkout_buffer_after_sec"
+                 min="0" max="300" step="1" required
+                 value="{{ store.checkout_buffer_after_sec | int }}">
+        </div>
+      </div>
+    </section>
+
+    <div class="rules-grid">
+      <article class="rule-card rule-card-r1">
+        <header class="rule-card-head">
+          <span class="rule-badge">R1</span>
+          <div>
+            <h3>Caixa sem venda POS</h3>
+            <p class="rule-card-desc">Permanência na lane sem transação associada.</p>
+          </div>
+        </header>
+        <div class="rules-fields-row">
+          <div class="form-row">
+            <label for="r1_min_checkout_duration_sec" class="label-with-tip">
+              Tempo mínimo (s)
+              <span class="field-tip" tabindex="0" role="button"
+                data-tip="Duração mínima na zona checkout_lane para candidata à R1. Default: 20 s.">?</span>
+            </label>
+            <input type="number" id="r1_min_checkout_duration_sec" name="r1_min_checkout_duration_sec"
+                   min="1" max="3600" step="1" required
+                   value="{{ store.r1_min_checkout_duration_sec | int }}">
+          </div>
+          <div class="form-row">
+            <label for="pos_match_delta_sec" class="label-with-tip">
+              Delta POS (s)
+              <span class="field-tip" tabindex="0" role="button"
+                data-tip="Margem δ ao cruzar POS com sessão: t_start−δ até t_end+δ. Default: 20 s.">?</span>
+            </label>
+            <input type="number" id="pos_match_delta_sec" name="pos_match_delta_sec"
+                   min="0" max="600" step="1" required value="{{ store.pos_match_delta_sec }}">
+          </div>
+        </div>
+      </article>
+
+      <article class="rule-card rule-card-r1b">
+        <header class="rule-card-head">
+          <span class="rule-badge rule-badge-muted">R1b</span>
+          <div>
+            <h3>Voltou e pagou</h3>
+            <p class="rule-card-desc">Supressão — não gera alerta.</p>
+          </div>
+        </header>
+        <div class="form-row">
+          <label for="t_return_sec" class="label-with-tip">
+            Janela de retorno (s)
+            <span class="field-tip" tabindex="0" role="button"
+              data-tip="Tempo máximo para voltar ao mesmo caixa e pagar, suprimindo R1 anterior. Default: 1800 s.">?</span>
+          </label>
+          <input type="number" id="t_return_sec" name="t_return_sec"
+                 min="60" max="86400" step="1" required value="{{ store.t_return_sec | int }}">
+        </div>
+      </article>
+
+      <article class="rule-card rule-card-r2">
+        <header class="rule-card-head">
+          <span class="rule-badge">R2</span>
+          <div>
+            <h3>Skip checkout</h3>
+            <p class="rule-card-desc">Saiu carregando sem passar no caixa.</p>
+          </div>
+        </header>
+        <div class="form-row">
+          <label for="carry_confidence_threshold" class="label-with-tip">
+            Confiança visual mín.
+            <span class="field-tip" tabindex="0" role="button"
+              data-tip="Confiança mínima do perfil visual para R2, R3 e R5. Default: 0.55.">?</span>
+          </label>
+          <input type="number" id="carry_confidence_threshold" name="carry_confidence_threshold"
+                 min="0" max="1" step="0.01" required value="{{ store.carry_confidence_threshold }}">
+        </div>
+      </article>
+
+      <article class="rule-card rule-card-r3">
+        <header class="rule-card-head">
+          <span class="rule-badge">R3</span>
+          <div>
+            <h3>POS &lt; visual</h3>
+            <p class="rule-card-desc">Pagou menos que a estimativa visual.</p>
+          </div>
+        </header>
+        <div class="form-row">
+          <label for="r3_visual_margin" class="label-with-tip">
+            Margem (itens)
+            <span class="field-tip" tabindex="0" role="button"
+              data-tip="Dispara se qty_total &lt; visual_estimate − margem. Default: 2.">?</span>
+          </label>
+          <input type="number" id="r3_visual_margin" name="r3_visual_margin"
+                 min="0" max="20" step="1" required value="{{ store.r3_visual_margin }}">
+        </div>
+      </article>
+
+      <article class="rule-card rule-card-r4">
+        <header class="rule-card-head">
+          <span class="rule-badge">R4</span>
+          <div>
+            <h3>Compra rápida</h3>
+            <p class="rule-card-desc">Muitos itens POS em tempo curto no caixa.</p>
+          </div>
+        </header>
+        <div class="rules-fields-row">
+          <div class="form-row">
+            <label for="r4_min_items" class="label-with-tip">
+              Mín. itens
+              <span class="field-tip" tabindex="0" role="button"
+                data-tip="Qty mínima no POS para candidata à R4. Default: 5.">?</span>
+            </label>
+            <input type="number" id="r4_min_items" name="r4_min_items"
+                   min="1" max="100" step="1" required value="{{ store.r4_min_items }}">
+          </div>
+          <div class="form-row">
+            <label for="r4_fast_duration_sec" class="label-with-tip">
+              Tempo máx. (s)
+              <span class="field-tip" tabindex="0" role="button"
+                data-tip="Duração máxima no caixa considerada rápida demais. Default: 90 s.">?</span>
+            </label>
+            <input type="number" id="r4_fast_duration_sec" name="r4_fast_duration_sec"
+                   min="1" max="3600" step="1" required
+                   value="{{ store.r4_fast_duration_sec | int }}">
+          </div>
+        </div>
+        <div class="checkbox-row rule-card-check">
+          <input type="checkbox" id="enable_r4" name="enable_r4" {% if store.enable_r4 %}checked{% endif %}>
+          <label for="enable_r4">Ativar R4 nesta loja</label>
+        </div>
+      </article>
+
+      <article class="rule-card rule-card-r5">
+        <header class="rule-card-head">
+          <span class="rule-badge">R5</span>
+          <div>
+            <h3>Cancelou e levou</h3>
+            <p class="rule-card-desc">POS cancelado + saída com carga.</p>
+          </div>
+        </header>
+        <div class="form-row">
+          <label for="r5_cancelled_delta_sec" class="label-with-tip">
+            Delta cancel. (s)
+            <span class="field-tip" tabindex="0" role="button"
+              data-tip="Margem ± em torno da visita para buscar transações cancelled. Default: 60 s.">?</span>
+          </label>
+          <input type="number" id="r5_cancelled_delta_sec" name="r5_cancelled_delta_sec"
+                 min="0" max="600" step="1" required value="{{ store.r5_cancelled_delta_sec }}">
+        </div>
+      </article>
+    </div>
+
+    <div class="rules-form-actions card">
+      <button type="submit" class="btn">Salvar configurações</button>
+      <a class="btn btn-secondary" href="/groups/{{ group.id }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

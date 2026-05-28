@@ -10,6 +10,21 @@ from track_fraude_core.db.camera_roles import (
     infer_camera_role,
     normalize_camera_role,
 )
+from track_fraude_core.db.alert_rule_defaults import (
+    BUFFER_AFTER_SEC,
+    BUFFER_BEFORE_SEC,
+    CARRY_CONFIDENCE_THRESHOLD,
+    CHECKOUT_BUFFER_AFTER_SEC,
+    CHECKOUT_BUFFER_BEFORE_SEC,
+    ENABLE_R4,
+    POS_MATCH_DELTA_SEC,
+    R1_MIN_CHECKOUT_DURATION_SEC,
+    R3_VISUAL_MARGIN,
+    R4_FAST_DURATION_SEC,
+    R4_MIN_ITEMS,
+    R5_CANCELLED_DELTA_SEC,
+    T_RETURN_SEC,
+)
 from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
 
 
@@ -30,6 +45,17 @@ class StoreRecord:
     ocr_min_confidence: float
     pos_match_delta_sec: int
     r1_min_checkout_duration_sec: float
+    t_return_sec: float
+    r3_visual_margin: int
+    carry_confidence_threshold: float
+    r4_min_items: int
+    r4_fast_duration_sec: float
+    enable_r4: bool
+    r5_cancelled_delta_sec: int
+    buffer_before_sec: float
+    buffer_after_sec: float
+    checkout_buffer_before_sec: float
+    checkout_buffer_after_sec: float
     active: bool
 
 
@@ -81,6 +107,7 @@ class StoreRepository:
 
     @staticmethod
     def _store_from_row(row: Any) -> StoreRecord:
+        keys = row.keys()
         return StoreRecord(
             id=int(row["id"]),
             group_db_id=int(row["group_db_id"]),
@@ -97,6 +124,31 @@ class StoreRepository:
             ocr_min_confidence=float(row["ocr_min_confidence"]),
             pos_match_delta_sec=int(row["pos_match_delta_sec"]),
             r1_min_checkout_duration_sec=float(row["r1_min_checkout_duration_sec"]),
+            t_return_sec=float(row["t_return_sec"]) if "t_return_sec" in keys else T_RETURN_SEC,
+            r3_visual_margin=int(row["r3_visual_margin"]) if "r3_visual_margin" in keys else R3_VISUAL_MARGIN,
+            carry_confidence_threshold=float(row["carry_confidence_threshold"])
+            if "carry_confidence_threshold" in keys
+            else CARRY_CONFIDENCE_THRESHOLD,
+            r4_min_items=int(row["r4_min_items"]) if "r4_min_items" in keys else R4_MIN_ITEMS,
+            r4_fast_duration_sec=float(row["r4_fast_duration_sec"])
+            if "r4_fast_duration_sec" in keys
+            else R4_FAST_DURATION_SEC,
+            enable_r4=bool(row["enable_r4"]) if "enable_r4" in keys else ENABLE_R4,
+            r5_cancelled_delta_sec=int(row["r5_cancelled_delta_sec"])
+            if "r5_cancelled_delta_sec" in keys
+            else R5_CANCELLED_DELTA_SEC,
+            buffer_before_sec=float(row["buffer_before_sec"])
+            if "buffer_before_sec" in keys
+            else BUFFER_BEFORE_SEC,
+            buffer_after_sec=float(row["buffer_after_sec"])
+            if "buffer_after_sec" in keys
+            else BUFFER_AFTER_SEC,
+            checkout_buffer_before_sec=float(row["checkout_buffer_before_sec"])
+            if "checkout_buffer_before_sec" in keys
+            else CHECKOUT_BUFFER_BEFORE_SEC,
+            checkout_buffer_after_sec=float(row["checkout_buffer_after_sec"])
+            if "checkout_buffer_after_sec" in keys
+            else CHECKOUT_BUFFER_AFTER_SEC,
             active=bool(row["active"]),
         )
 
@@ -205,8 +257,19 @@ class StoreRepository:
         timezone: str = "America/Sao_Paulo",
         ocr_sample_interval_sec: int = 30,
         ocr_min_confidence: float = 0.5,
-        pos_match_delta_sec: int = 60,
-        r1_min_checkout_duration_sec: float = 60.0,
+        pos_match_delta_sec: int = POS_MATCH_DELTA_SEC,
+        r1_min_checkout_duration_sec: float = R1_MIN_CHECKOUT_DURATION_SEC,
+        t_return_sec: float = T_RETURN_SEC,
+        r3_visual_margin: int = R3_VISUAL_MARGIN,
+        carry_confidence_threshold: float = CARRY_CONFIDENCE_THRESHOLD,
+        r4_min_items: int = R4_MIN_ITEMS,
+        r4_fast_duration_sec: float = R4_FAST_DURATION_SEC,
+        enable_r4: bool = ENABLE_R4,
+        r5_cancelled_delta_sec: int = R5_CANCELLED_DELTA_SEC,
+        buffer_before_sec: float = BUFFER_BEFORE_SEC,
+        buffer_after_sec: float = BUFFER_AFTER_SEC,
+        checkout_buffer_before_sec: float = CHECKOUT_BUFFER_BEFORE_SEC,
+        checkout_buffer_after_sec: float = CHECKOUT_BUFFER_AFTER_SEC,
         active: bool = True,
     ) -> StoreRecord:
         with self._conn() as conn:
@@ -216,8 +279,14 @@ class StoreRepository:
                     group_db_id, store_id, name,
                     street, number, neighborhood, city, state, cep,
                     timezone, ocr_sample_interval_sec, ocr_min_confidence,
-                    pos_match_delta_sec, r1_min_checkout_duration_sec, active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pos_match_delta_sec, r1_min_checkout_duration_sec,
+                    t_return_sec, r3_visual_margin, carry_confidence_threshold,
+                    r4_min_items, r4_fast_duration_sec, enable_r4,
+                    r5_cancelled_delta_sec,
+                    buffer_before_sec, buffer_after_sec,
+                    checkout_buffer_before_sec, checkout_buffer_after_sec,
+                    active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     group_db_id,
@@ -234,6 +303,17 @@ class StoreRepository:
                     ocr_min_confidence,
                     pos_match_delta_sec,
                     float(r1_min_checkout_duration_sec),
+                    float(t_return_sec),
+                    r3_visual_margin,
+                    carry_confidence_threshold,
+                    r4_min_items,
+                    float(r4_fast_duration_sec),
+                    1 if enable_r4 else 0,
+                    r5_cancelled_delta_sec,
+                    float(buffer_before_sec),
+                    float(buffer_after_sec),
+                    float(checkout_buffer_before_sec),
+                    float(checkout_buffer_after_sec),
                     1 if active else 0,
                 ),
             )
@@ -259,6 +339,17 @@ class StoreRepository:
             "ocr_min_confidence",
             "pos_match_delta_sec",
             "r1_min_checkout_duration_sec",
+            "t_return_sec",
+            "r3_visual_margin",
+            "carry_confidence_threshold",
+            "r4_min_items",
+            "r4_fast_duration_sec",
+            "enable_r4",
+            "r5_cancelled_delta_sec",
+            "buffer_before_sec",
+            "buffer_after_sec",
+            "checkout_buffer_before_sec",
+            "checkout_buffer_after_sec",
             "active",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -267,6 +358,8 @@ class StoreRepository:
 
         if "active" in updates:
             updates["active"] = 1 if updates["active"] else 0
+        if "enable_r4" in updates:
+            updates["enable_r4"] = 1 if updates["enable_r4"] else 0
         for text_field in ("store_id", "name", "street", "number", "neighborhood", "city", "cep", "timezone"):
             if text_field in updates:
                 updates[text_field] = str(updates[text_field]).strip()
@@ -563,5 +656,20 @@ class StoreRepository:
                 "ocr_min_confidence": store.ocr_min_confidence,
                 "pos_match_delta_sec": store.pos_match_delta_sec,
                 "r1_min_checkout_duration_sec": store.r1_min_checkout_duration_sec,
+            },
+            "alert_rules": {
+                "t_return_sec": store.t_return_sec,
+                "r3_visual_margin": store.r3_visual_margin,
+                "carry_confidence_threshold": store.carry_confidence_threshold,
+                "r4_min_items": store.r4_min_items,
+                "r4_fast_duration_sec": store.r4_fast_duration_sec,
+                "enable_r4": store.enable_r4,
+                "r5_cancelled_delta_sec": store.r5_cancelled_delta_sec,
+            },
+            "evidence": {
+                "buffer_before_sec": store.buffer_before_sec,
+                "buffer_after_sec": store.buffer_after_sec,
+                "checkout_buffer_before_sec": store.checkout_buffer_before_sec,
+                "checkout_buffer_after_sec": store.checkout_buffer_after_sec,
             },
         }

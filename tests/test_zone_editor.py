@@ -227,26 +227,65 @@ def test_zone_editor_page(client: TestClient, repo: StoreRepository, group_repo:
     assert "zone_editor.js" in response.text
     assert 'id="lane-tabs"' in response.text
     assert 'id="add-lane"' in response.text
-    assert 'id="r1-min-duration-sec"' in response.text
+    assert 'id="r1-min-duration-sec"' not in response.text
 
 
-def test_save_r1_min_checkout_duration_api(
+def test_store_rules_page(
+    client: TestClient, repo: StoreRepository, group_repo: GroupRepository
+):
+    store_id, _camera_id = seed_checkout_camera(repo, group_repo)
+    login(client)
+    response = client.get(f"/stores/{store_id}/rules")
+    assert response.status_code == 200
+    assert "Regras de alerta" in response.text
+    assert 'name="r1_min_checkout_duration_sec"' in response.text
+    assert 'name="pos_match_delta_sec"' in response.text
+    assert 'name="t_return_sec"' in response.text
+    assert 'name="buffer_before_sec"' in response.text
+    assert 'name="checkout_buffer_after_sec"' in response.text
+
+
+def test_save_store_rules_form(
     client: TestClient, repo: StoreRepository, group_repo: GroupRepository
 ):
     store_id, _camera_id = seed_checkout_camera(repo, group_repo)
     login(client)
     response = client.post(
-        f"/stores/{store_id}/r1-min-checkout-duration",
-        json={"r1_min_checkout_duration_sec": 90},
+        f"/stores/{store_id}/rules",
+        data={
+            "buffer_before_sec": "30",
+            "buffer_after_sec": "25",
+            "checkout_buffer_before_sec": "8",
+            "checkout_buffer_after_sec": "7",
+            "r1_min_checkout_duration_sec": "45",
+            "pos_match_delta_sec": "25",
+            "t_return_sec": "3600",
+            "carry_confidence_threshold": "0.6",
+            "r3_visual_margin": "3",
+            "r4_min_items": "6",
+            "r4_fast_duration_sec": "120",
+            "r5_cancelled_delta_sec": "90",
+            "enable_r4": "on",
+        },
+        follow_redirects=False,
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ok"] is True
-    assert payload["r1_min_checkout_duration_sec"] == 90
+    assert response.status_code == 303
 
     store = repo.get_store(store_id)
     assert store is not None
-    assert store.r1_min_checkout_duration_sec == 90
+    assert store.buffer_before_sec == 30
+    assert store.buffer_after_sec == 25
+    assert store.checkout_buffer_before_sec == 8
+    assert store.checkout_buffer_after_sec == 7
+    assert store.r1_min_checkout_duration_sec == 45
+    assert store.pos_match_delta_sec == 25
+    assert store.t_return_sec == 3600
+    assert store.carry_confidence_threshold == 0.6
+    assert store.r3_visual_margin == 3
+    assert store.r4_min_items == 6
+    assert store.r4_fast_duration_sec == 120
+    assert store.r5_cancelled_delta_sec == 90
+    assert store.enable_r4 is True
 
 
 def test_save_multiple_checkout_lanes_api(

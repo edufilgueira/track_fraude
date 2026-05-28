@@ -24,18 +24,21 @@ def build_timeline_payload(alert: dict[str, Any]) -> dict[str, Any]:
     return {
         "alert_id": alert.get("alert_id"),
         "rule_id": alert.get("rule_id"),
+        "rule_ids": alert.get("rule_ids") or [alert.get("rule_id")],
         "severity": alert.get("severity"),
+        "suspicion_score": alert.get("suspicion_score"),
         "date": alert.get("date"),
         "global_person_id": alert.get("global_person_id"),
         "track_key": alert.get("track_key"),
-        "checkout_session": session,
+        "checkout_session": session or None,
         "store_timeline": alert.get("store_timeline") or [],
+        "vision_signals": alert.get("vision_signals"),
     }
 
 
 def build_pos_context(alert: dict[str, Any]) -> dict[str, Any]:
     session = alert.get("checkout_session") or {}
-    return {
+    payload: dict[str, Any] = {
         "alert_id": alert.get("alert_id"),
         "lane_id": session.get("lane_id"),
         "checkout_window": {
@@ -45,12 +48,19 @@ def build_pos_context(alert: dict[str, Any]) -> dict[str, Any]:
         "pos_matches": alert.get("pos_matches") or [],
         "pos_match_count": len(alert.get("pos_matches") or []),
     }
+    if alert.get("cancelled_transactions"):
+        payload["cancelled_transactions"] = alert["cancelled_transactions"]
+    return payload
 
 
 def build_summary_text(alert: dict[str, Any]) -> str:
+    score = alert.get("suspicion_score")
+    score_text = f" | Score: {score}" if score is not None else ""
+    rule_ids = alert.get("rule_ids") or [alert.get("rule_id")]
+    rule_label = "+".join(str(rid) for rid in rule_ids if rid)
     lines = [
-        f"Alerta {alert.get('alert_id')} | Regra: {alert.get('rule_id')} | "
-        f"Severidade: {alert.get('severity', 'high')}",
+        f"Alerta {alert.get('alert_id')} | Regra(s): {rule_label} | "
+        f"Severidade: {alert.get('severity', 'high')}{score_text}",
         "",
     ]
     if alert.get("global_person_id"):
@@ -78,10 +88,31 @@ def build_summary_text(alert: dict[str, Any]) -> str:
 
     lines.append("")
     pos_matches = alert.get("pos_matches") or []
-    if pos_matches:
+    rule_id = str(alert.get("rule_id", ""))
+    if rule_id == "R5" and alert.get("cancelled_transactions"):
+        lines.append(
+            f"POS: {len(alert['cancelled_transactions'])} transação(ões) cancelada(s) na visita."
+        )
+    elif pos_matches:
         lines.append(f"POS: {len(pos_matches)} transação(ões) no intervalo.")
-    else:
+    elif session.get("t_start"):
         lines.append("POS: Nenhuma venda registrada no intervalo da sessão de caixa.")
+    else:
+        lines.append("POS: Nenhuma venda registrada na visita.")
+
+    vision = alert.get("vision_signals") or {}
+    delta = vision.get("carry_delta") or {}
+    if delta.get("positive"):
+        net_obj = delta.get("net_objects", 0)
+        lines.append(
+            "Visão: saiu com carga líquida acima da entrada "
+            f"(+{net_obj} objeto(s), confiança {vision.get('confidence', '?')})."
+        )
+    elif vision.get("carry_baseline") or vision.get("carry_at_enter"):
+        enter = vision.get("carry_baseline") or vision.get("carry_at_enter") or {}
+        exit_snap = vision.get("carry_at_exit") or {}
+        if enter.get("hands_empty") and exit_snap.get("hands_empty"):
+            lines.append("Visão: entrou e saiu sem indício de carga nas mãos.")
 
     lines.extend(["", alert.get("summary", ""), "", "Vídeos: cam1_clip.mp4 | cam2_clip.mp4"])
     if session.get("t_start"):
