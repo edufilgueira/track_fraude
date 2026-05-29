@@ -26,7 +26,19 @@
         <span class="rules-global-icon" aria-hidden="true">▶</span>
         <div>
           <h3>Recorte de vídeo (evidência)</h3>
-          <p class="hint">Usado por <code>run_evidence.py</code> — não faz parte das regras R1–R5.</p>
+          <p class="hint">Buffers para <code>run_evidence.py</code>; amostragem YOLO (<code>vid_stride</code>) para <code>run_track.py</code>.</p>
+        </div>
+      </div>
+      <div class="rules-fields-row rules-fields-row-vid-stride">
+        <div class="form-row">
+          <label for="vid_stride" class="label-with-tip">
+            vid_stride
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: vid_stride"
+              data-tip="Processa 1 a cada N frames no YOLO/ByteTrack (run_track.py). Ex.: 5 em vídeo 30 FPS ≈ 6 amostras/s. Default: 5.">?</span>
+          </label>
+          <input type="number" id="vid_stride" name="vid_stride"
+                 min="1" max="60" step="1" required value="{{ store.vid_stride | int }}">
         </div>
       </div>
       <div class="rules-fields-row rules-fields-row-4">

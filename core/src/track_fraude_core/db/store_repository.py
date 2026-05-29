@@ -24,6 +24,7 @@ from track_fraude_core.db.alert_rule_defaults import (
     R4_MIN_ITEMS,
     R5_CANCELLED_DELTA_SEC,
     T_RETURN_SEC,
+    VID_STRIDE,
 )
 from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
 
@@ -56,6 +57,7 @@ class StoreRecord:
     buffer_after_sec: float
     checkout_buffer_before_sec: float
     checkout_buffer_after_sec: float
+    vid_stride: int
     active: bool
 
 
@@ -149,6 +151,7 @@ class StoreRepository:
             checkout_buffer_after_sec=float(row["checkout_buffer_after_sec"])
             if "checkout_buffer_after_sec" in keys
             else CHECKOUT_BUFFER_AFTER_SEC,
+            vid_stride=int(row["vid_stride"]) if "vid_stride" in keys else VID_STRIDE,
             active=bool(row["active"]),
         )
 
@@ -270,6 +273,7 @@ class StoreRepository:
         buffer_after_sec: float = BUFFER_AFTER_SEC,
         checkout_buffer_before_sec: float = CHECKOUT_BUFFER_BEFORE_SEC,
         checkout_buffer_after_sec: float = CHECKOUT_BUFFER_AFTER_SEC,
+        vid_stride: int = VID_STRIDE,
         active: bool = True,
     ) -> StoreRecord:
         with self._conn() as conn:
@@ -285,8 +289,9 @@ class StoreRepository:
                     r5_cancelled_delta_sec,
                     buffer_before_sec, buffer_after_sec,
                     checkout_buffer_before_sec, checkout_buffer_after_sec,
+                    vid_stride,
                     active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     group_db_id,
@@ -314,6 +319,7 @@ class StoreRepository:
                     float(buffer_after_sec),
                     float(checkout_buffer_before_sec),
                     float(checkout_buffer_after_sec),
+                    int(vid_stride),
                     1 if active else 0,
                 ),
             )
@@ -350,6 +356,7 @@ class StoreRepository:
             "buffer_after_sec",
             "checkout_buffer_before_sec",
             "checkout_buffer_after_sec",
+            "vid_stride",
             "active",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -671,5 +678,8 @@ class StoreRepository:
                 "buffer_after_sec": store.buffer_after_sec,
                 "checkout_buffer_before_sec": store.checkout_buffer_before_sec,
                 "checkout_buffer_after_sec": store.checkout_buffer_after_sec,
+            },
+            "track": {
+                "vid_stride": store.vid_stride,
             },
         }

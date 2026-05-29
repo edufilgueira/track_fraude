@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS stores (
     buffer_after_sec REAL NOT NULL DEFAULT 20,
     checkout_buffer_before_sec REAL NOT NULL DEFAULT 5,
     checkout_buffer_after_sec REAL NOT NULL DEFAULT 5,
+    vid_stride INTEGER NOT NULL DEFAULT 5,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -198,6 +199,7 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
         ("buffer_after_sec", "REAL NOT NULL DEFAULT 20"),
         ("checkout_buffer_before_sec", "REAL NOT NULL DEFAULT 5"),
         ("checkout_buffer_after_sec", "REAL NOT NULL DEFAULT 5"),
+        ("vid_stride", "INTEGER NOT NULL DEFAULT 5"),
     ]
     for column, ddl in rule_column_migrations:
         if column not in store_columns:

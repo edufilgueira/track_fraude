@@ -13,7 +13,7 @@ from track_fraude.evidence import (
     compute_checkout_range,
     compute_evidence_range,
 )
-from track_fraude.storage import ProcessedScope, ReviewScope, processed_root, review_root
+from track_fraude.storage import ProcessedScope, processed_root
 
 
 def _sample_alert() -> dict:
@@ -81,7 +81,6 @@ def test_build_evidence_pack_without_clips(tmp_path: Path):
         },
     }
     processed = ProcessedScope.from_config(processed_root(project_root), config)
-    review = ReviewScope.from_config(review_root(project_root), config)
 
     with patch("track_fraude.evidence.builder.extract_clip_for_range"):
         pack = build_evidence_pack(
@@ -89,13 +88,16 @@ def test_build_evidence_pack_without_clips(tmp_path: Path):
             date="2026-05-22",
             project_root=project_root,
             processed=processed,
-            review=review,
             config=config,
             window=EvidenceWindow(),
             skip_clips=True,
         )
 
-    assert pack.output_dir.exists()
+    expected_dir = (
+        project_root
+        / "data/processed/default/LOJA-01/2026-05-22/review/AL-20260522-0001"
+    )
+    assert pack.output_dir == expected_dir
     assert (pack.output_dir / "timeline.json").is_file()
     assert (pack.output_dir / "pos_context.json").is_file()
     assert (pack.output_dir / "summary.txt").is_file()

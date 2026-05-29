@@ -39,12 +39,6 @@ def main() -> None:
     add_store_cli_args(parser, db_default=str(ROOT / "data" / "track_fraude.db"))
     parser.add_argument("--video", default=None, help="Caminho do vídeo")
     parser.add_argument("--model", default="yolov8n.pt", help="Modelo YOLO (default: yolov8n.pt)")
-    parser.add_argument(
-        "--vid-stride",
-        type=int,
-        default=5,
-        help="Processa 1 a cada N frames (default: 5)",
-    )
     parser.add_argument("--conf", type=float, default=0.5, help="Confiança mínima YOLO")
     parser.add_argument(
         "--tracker",
@@ -57,6 +51,9 @@ def main() -> None:
     validate_camera_in_config(config, args.camera)
     camera_ids = camera_ids_from_config(config)
     scope = ProcessedScope.from_config(processed_root(ROOT), config)
+
+    track_settings = config.get("track") or {}
+    vid_stride = max(1, int(track_settings.get("vid_stride", 5)))
 
     video_path = resolve_video_path(
         ROOT, date=args.date, camera_id=args.camera, video=args.video
@@ -80,7 +77,7 @@ def main() -> None:
     track_config = TrackRunConfig(
         model_name=args.model,
         tracker=args.tracker,
-        vid_stride=max(1, args.vid_stride),
+        vid_stride=vid_stride,
         conf=args.conf,
     )
 

@@ -18,9 +18,7 @@ from track_fraude.evidence.store_config import evidence_window_from_store
 from track_fraude.storage import (
     FilePipelineStateRepository,
     ProcessedScope,
-    ReviewScope,
     processed_root,
-    review_root,
 )
 
 
@@ -69,7 +67,6 @@ def main() -> None:
 
     config = load_job_store_config(args)
     processed = ProcessedScope.from_config(processed_root(ROOT), config)
-    review = ReviewScope.from_config(review_root(ROOT), config)
 
     alerts_path = processed.alerts_index_path(args.date)
     if not alerts_path.is_file():
@@ -115,7 +112,6 @@ def main() -> None:
             date=args.date,
             project_root=ROOT,
             processed=processed,
-            review=review,
             config=config,
             window=window,
             skip_clips=args.skip_clips,
@@ -125,7 +121,7 @@ def main() -> None:
         print(f"  arquivos: {', '.join(pack.files)}")
 
     review_index = build_review_index(alerts_index=alerts_index, packs=packs)
-    review_index_path = review.review_index_path(args.date)
+    review_index_path = processed.review_index_path(args.date)
     review_index_path.parent.mkdir(parents=True, exist_ok=True)
     with review_index_path.open("w", encoding="utf-8") as handle:
         json.dump(review_index, handle, indent=2, ensure_ascii=False)

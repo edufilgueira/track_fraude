@@ -73,6 +73,7 @@ async def update_store_rules(
     r4_min_items: int = Form(...),
     r4_fast_duration_sec: float = Form(...),
     r5_cancelled_delta_sec: int = Form(...),
+    vid_stride: int = Form(...),
     buffer_before_sec: float = Form(...),
     buffer_after_sec: float = Form(...),
     checkout_buffer_before_sec: float = Form(...),
@@ -90,6 +91,8 @@ async def update_store_rules(
         raise HTTPException(status_code=400, detail="Delta POS inválido")
     if not (0 <= carry_confidence_threshold <= 1):
         raise HTTPException(status_code=400, detail="Confiança visual inválida (0–1)")
+    if not (1 <= vid_stride <= 60):
+        raise HTTPException(status_code=400, detail="vid_stride inválido (1–60)")
 
     store_repo.update_store(
         store_db_id,
@@ -101,6 +104,7 @@ async def update_store_rules(
         r4_min_items=int(r4_min_items),
         r4_fast_duration_sec=float(r4_fast_duration_sec),
         r5_cancelled_delta_sec=int(r5_cancelled_delta_sec),
+        vid_stride=int(vid_stride),
         buffer_before_sec=float(buffer_before_sec),
         buffer_after_sec=float(buffer_after_sec),
         checkout_buffer_before_sec=float(checkout_buffer_before_sec),

@@ -722,6 +722,11 @@ footer {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.rules-fields-row-vid-stride {
+  grid-template-columns: minmax(180px, 280px);
+  margin-bottom: 4px;
+}
+
 .rule-card-check {
   margin-top: 2px;
   padding-top: 8px;

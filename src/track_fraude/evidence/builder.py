@@ -19,7 +19,7 @@ from track_fraude.evidence.window import (
 )
 from track_fraude.merge.builder import resolve_merge_cameras
 from track_fraude.models.sync import SyncMap
-from track_fraude.storage import ProcessedScope, ReviewScope
+from track_fraude.storage import ProcessedScope
 
 
 @dataclass(frozen=True)
@@ -47,13 +47,12 @@ def build_evidence_pack(
     date: str,
     project_root: Path,
     processed: ProcessedScope,
-    review: ReviewScope,
     config: dict[str, Any],
     window: EvidenceWindow,
     skip_clips: bool = False,
 ) -> EvidencePackResult:
     alert_id = str(alert["alert_id"])
-    output_dir = review.alert_dir(date, alert_id)
+    output_dir = processed.review_alert_dir(date, alert_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     clip_start, clip_end = compute_evidence_range(alert, window=window)

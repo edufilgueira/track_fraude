@@ -19,10 +19,6 @@ data/processed/**/*
 data/output/**/*
 !data/output/.gitkeep
 
-# Pacotes de evidência para revisão (Fase 5)
-data/review/**/*
-!data/review/.gitkeep
-
 # Banco SQLite local
 data/track_fraude.db
 data/track_fraude.db-shm

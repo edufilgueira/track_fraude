@@ -57,7 +57,7 @@ Copie `**server/` + `core/**` para outro servidor; ajuste `server/config/setting
 ## Fase 1 — Sync temporal
 
 Saídas técnicas em `data/processed/{group_code}/{store_id}/{date}/`  
-(inclui `events/timelines.json`, `alerts/index.json` e, nas fases futuras, clips por alerta).
+(inclui `events/timelines.json`, `alerts/index.json`, `review/` com clips por alerta).
 
 ```powershell
 python tools/generate_test_video.py --store-id LOJA-01 --group-code cometa --camera cam2 --date 2026-05-22
@@ -74,13 +74,13 @@ OCR obrigatório: instale [Tesseract OCR](https://github.com/UB-Mannheim/tessera
 Requer Fase 1 (`sync_map.json`) e `pip install -e ".[track]"` (Ultralytics YOLOv8).
 
 ```powershell
-python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 ```
 
 Saída: `data/processed/{group_code}/{store_id}/{date}/{camera}/tracks.parquet` + `manifest.json`.  
 Colunas: `track_id`, `frame_idx`, `t_abs`, `x1`, `y1`, `x2`, `y2` (bbox).  
-`--vid-stride` processa 1 a cada N frames (CPU ok com `yolov8n.pt`).
+`vid_stride` (amostragem YOLO) é configurado na tela **Regras** da loja (default 5).
 
 Para validar ≥3 pessoas, use um vídeo real com tráfego (`--video caminho.mp4`).
 
@@ -99,7 +99,34 @@ Validação com vídeo real continua manual (sync → track → events → alert
 
 Acesse o painel: **[http://127.0.0.1:8080/login](http://127.0.0.1:8080/login)** (`admin` / `admin123` — altere em `server/config/settings.yaml`)
 
-Próximo passo: **Fase 7** — pipeline batch diário (`run_daily_pipeline.py`); depois **Fase 7b** — YOLO só em trechos com movimento.
+Próximo passo: **Fase 7b** — YOLO só com presença na ROI (`vid_stride=5` nos trechos ativos).
+
+## Fase 7 — Pipeline batch diário
+
+Orquestra todos os jobs (Fases 1–6) em um comando. Lê loja/câmeras do **SQLite** (`--store-id`, `--group-code`).
+
+```powershell
+# Dia completo (requer vídeos em data/raw/video/{date}/cam1.mp4 e cam2.mp4)
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+
+# Só listar comandos
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --dry-run
+
+# Retomar do merge
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --from merge
+
+# Rodar só uma fase
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --only track --camera cam2
+
+# INGEST isolado (valida vídeo + POS)
+python jobs/run_ingest.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+```
+
+Ordem: INGEST → SYNC → TRACK (cam1, cam2) → EVENTS → MERGE → POS → VISION → ALERTS → EVIDENCE.
+
+Saídas extras em `data/processed/{group}/{store}/{date}/`: `ingest_report.json`, `pipeline_run_summary.json`.
+
+Opções úteis: `--skip-vision`, `--skip-evidence`, `--pos-api-url http://127.0.0.1:3099`.
 
 ## Fase 6 — Regras completas (R1–R5)
 
@@ -141,10 +168,10 @@ python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code de
 
 Requer **FFmpeg** no PATH para gerar os MP4.
 
-Saídas em `data/review/{group}/{store}/{date}/`:
+Saídas em `data/processed/{group}/{store}/{date}/review/`:
 
 ```text
-alerts/AL-20260522-0001/
+review/AL-20260522-0001/
   timeline.json
   pos_context.json
   summary.txt
@@ -152,7 +179,7 @@ alerts/AL-20260522-0001/
   cam2_clip.mp4
   cam2_checkout_clip.mp4   ← foco na sessão de caixa
   evidence.json
-index.json                 ← alertas + caminhos das evidências
+review/index.json          ← alertas + caminhos das evidências
 ```
 
 ## Fase 4 — Re-ID cross-camera
@@ -163,8 +190,8 @@ Requer `tracks.parquet` da **cam1 (entrada)** e **cam2 (caixa)**.
 # 1. Sync + track nas duas câmeras (se ainda não rodou)
 python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
 python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
-python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
-python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 
 # 2. Eventos (cam1 + cam2) — opcional antes do merge; melhora horário de entrada
 python jobs/run_events.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
@@ -236,7 +263,7 @@ Se `entrance` e `exit` tiverem o **mesmo polígono**, o sistema trata automatica
 
 ```powershell
 python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
-python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
 python tools/render_track_overlay.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
 ```
 
@@ -244,7 +271,7 @@ python tools/render_track_overlay.py --date 2026-05-22 --camera cam1 --store-id 
 
 ```powershell
 python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
-python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 ```
 
@@ -286,11 +313,11 @@ python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code de
 ```powershell
 ### Cam1 (caixa):
 python jobs/run_sync.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
-python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
 python tools/render_track_overlay.py --date 2026-05-22 --camera cam1 --store-id LOJA-01 --group-code default
 ### Cam2 (caixa):
 python jobs/run_sync.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
-python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default --vid-stride 5
+python jobs/run_track.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 python tools/render_track_overlay.py --date 2026-05-22 --camera cam2 --store-id LOJA-01 --group-code default
 # Validar sync ↔ POS (cam2, se tiver POS alinhado):
 python jobs/validate_sync_pos.py --date 2026-05-22 --camera cam2 --frame 6550 --store-id LOJA-01 --group-code default
@@ -303,4 +330,20 @@ python jobs/run_vision.py --date 2026-05-22 --store-id LOJA-01 --group-code defa
 python jobs/run_alerts.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 # Produzir evidencias
 python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+```
+
+
+# Fase 7
+```powershell
+# Pipeline completo
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default
+
+# Ver comandos sem executar
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --dry-run
+
+# Retomar do merge
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --from merge
+
+# Só track cam2
+python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default --only track --camera cam2
 ```

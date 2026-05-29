@@ -55,6 +55,7 @@ class FilePipelineStateRepository(PipelineStateRepository):
             "store_id": self.scope.store_id,
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "phases": {
+                "ingest": {"status": "pending"},
                 "sync": {"status": "pending"},
                 "track": {"status": "pending"},
                 "merge": {"status": "pending"},
@@ -62,6 +63,7 @@ class FilePipelineStateRepository(PipelineStateRepository):
                 "pos_match": {"status": "pending"},
                 "alerts": {"status": "pending"},
                 "evidence": {"status": "pending"},
+                "daily_pipeline": {"status": "pending"},
             },
             "cameras": {
                 camera_id: {

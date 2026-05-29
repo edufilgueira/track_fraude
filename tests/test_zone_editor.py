@@ -242,6 +242,7 @@ def test_store_rules_page(
     assert 'name="pos_match_delta_sec"' in response.text
     assert 'name="t_return_sec"' in response.text
     assert 'name="buffer_before_sec"' in response.text
+    assert 'name="vid_stride"' in response.text
     assert 'name="checkout_buffer_after_sec"' in response.text
 
 
@@ -257,6 +258,7 @@ def test_save_store_rules_form(
             "buffer_after_sec": "25",
             "checkout_buffer_before_sec": "8",
             "checkout_buffer_after_sec": "7",
+            "vid_stride": "8",
             "r1_min_checkout_duration_sec": "45",
             "pos_match_delta_sec": "25",
             "t_return_sec": "3600",
@@ -277,6 +279,7 @@ def test_save_store_rules_form(
     assert store.buffer_after_sec == 25
     assert store.checkout_buffer_before_sec == 8
     assert store.checkout_buffer_after_sec == 7
+    assert store.vid_stride == 8
     assert store.r1_min_checkout_duration_sec == 45
     assert store.pos_match_delta_sec == 25
     assert store.t_return_sec == 3600
