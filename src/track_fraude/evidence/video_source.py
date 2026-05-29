@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from track_fraude.models.sync import SyncMap
+from track_fraude_core.db.evidence_ffmpeg import EvidenceEncodeSettings
 
 
 @dataclass(frozen=True)
@@ -149,12 +150,73 @@ def _run_ffmpeg(args: list[str]) -> None:
     )
 
 
+def _web_video_encode_args(
+    *,
+    scale_width: int | None = None,
+    preset: str = "fast",
+    crf: int = 28,
+) -> list[str]:
+    """H.264 + AAC — compatível com <video> nos navegadores."""
+    from track_fraude_core.db.evidence_ffmpeg import (
+        normalize_evidence_crf,
+        normalize_evidence_ffmpeg_preset,
+        normalize_evidence_scale_width,
+    )
+
+    width = normalize_evidence_scale_width(scale_width)
+    ffmpeg_preset = normalize_evidence_ffmpeg_preset(preset)
+    ffmpeg_crf = normalize_evidence_crf(crf)
+    args: list[str] = []
+    if width is not None:
+        args.extend(["-vf", f"scale={width}:-2"])
+    args.extend(
+        [
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            ffmpeg_preset,
+            "-crf",
+            str(ffmpeg_crf),
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+        ]
+    )
+    return args
+
+
+def _encode_args_from_settings(
+    encode_settings: EvidenceEncodeSettings | None,
+    *,
+    web_compatible: bool,
+) -> list[str]:
+    if not web_compatible:
+        return ["-c", "copy"]
+    settings = encode_settings or EvidenceEncodeSettings(None, "fast", 28)
+    return _web_video_encode_args(
+        scale_width=settings.scale_width,
+        preset=settings.preset,
+        crf=settings.crf,
+    )
+
+
 def _extract_segment_clip(
     segment: VideoSegment,
     *,
     clip_start: datetime,
     clip_end: datetime,
     output_path: Path,
+    web_compatible: bool = False,
+    encode_settings: EvidenceEncodeSettings | None = None,
 ) -> None:
     seg_end = segment.t_end or segment.t_start
     local_start = max(0.0, (clip_start - segment.t_start).total_seconds())
@@ -164,6 +226,9 @@ def _extract_segment_clip(
     )
     duration = max(0.1, local_end - local_start)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    encode_args = _encode_args_from_settings(
+        encode_settings, web_compatible=web_compatible
+    )
     _run_ffmpeg(
         [
             "-y",
@@ -173,8 +238,7 @@ def _extract_segment_clip(
             f"{duration:.3f}",
             "-i",
             str(segment.path),
-            "-c",
-            "copy",
+            *encode_args,
             str(output_path),
         ]
     )
@@ -186,6 +250,8 @@ def extract_clip_for_range(
     clip_start: datetime,
     clip_end: datetime,
     output_path: Path,
+    web_compatible: bool = False,
+    encode_settings: EvidenceEncodeSettings | None = None,
 ) -> None:
     if clip_end <= clip_start:
         raise ValueError("Intervalo de clip inválido")
@@ -204,6 +270,8 @@ def extract_clip_for_range(
             clip_start=clip_start,
             clip_end=clip_end,
             output_path=output_path,
+            web_compatible=web_compatible,
+            encode_settings=encode_settings,
         )
         return
 
@@ -217,6 +285,8 @@ def extract_clip_for_range(
                 clip_start=clip_start,
                 clip_end=clip_end,
                 output_path=part_path,
+                web_compatible=web_compatible,
+                encode_settings=encode_settings,
             )
             part_paths.append(part_path)
 
@@ -228,6 +298,9 @@ def extract_clip_for_range(
         lines = "\n".join(f"file '{path.as_posix()}'" for path in part_paths)
         list_file.write_text(lines, encoding="utf-8")
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        concat_args = _encode_args_from_settings(
+            encode_settings, web_compatible=web_compatible
+        )
         _run_ffmpeg(
             [
                 "-y",
@@ -237,8 +310,7 @@ def extract_clip_for_range(
                 "0",
                 "-i",
                 str(list_file),
-                "-c",
-                "copy",
+                *concat_args,
                 str(output_path),
             ]
         )

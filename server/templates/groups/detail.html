@@ -28,16 +28,25 @@
         <td><strong>{{ store.store_id }}</strong></td>
         <td>{{ store.name }}</td>
         <td>{{ store.city or '—' }}{% if store.state %} / {{ store.state }}{% endif %}</td>
-        <td>
-          {% if store.active %}
-          <span class="badge badge-active">Ativa</span>
-          {% else %}
+        <td class="status-cell" data-store-id="{{ store.id }}"{% if not store.active %} data-inactive="1"{% endif %}>
+          {% if not store.active %}
           <span class="badge badge-inactive">Inativa</span>
+          {% elif store.id in processing_stores %}
+            {% set processing = true %}
+            {% set active = true %}
+            {% set run = store_runs.get(store.id) %}
+            {% set phase_hint = run.current_phase if run else '' %}
+            {% include "partials/entity_status.html" %}
+          {% else %}
+          <span class="badge badge-active">Ativa</span>
           {% endif %}
         </td>
         <td class="actions">
           <a class="btn btn-secondary" href="/stores/{{ store.id }}">Configurar</a>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}/rules">Regras</a>
+          {% if store_has_review.get(store.id) %}
+          <a class="btn" href="/stores/{{ store.id }}/review">Revisão</a>
+          {% endif %}
           <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Editar</a>
         </td>
       </tr>
@@ -52,4 +61,7 @@
 <p class="hint">
   <a href="/groups">← Voltar aos grupos</a>
 </p>
+{% endblock %}
+{% block scripts %}
+<script src="/static/pipeline_status.js"></script>
 {% endblock %}

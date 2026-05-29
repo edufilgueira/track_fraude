@@ -26,10 +26,10 @@
         <span class="rules-global-icon" aria-hidden="true">▶</span>
         <div>
           <h3>Recorte de vídeo (evidência)</h3>
-          <p class="hint">Buffers para <code>run_evidence.py</code>; amostragem YOLO (<code>vid_stride</code>) para <code>run_track.py</code>.</p>
+          <p class="hint">FFmpeg (<code>scale</code>, <code>preset</code>, <code>crf</code>) e buffers para <code>run_evidence.py</code>; amostragem YOLO (<code>vid_stride</code>) para <code>run_track.py</code>.</p>
         </div>
       </div>
-      <div class="rules-fields-row rules-fields-row-vid-stride">
+      <div class="rules-fields-row rules-fields-row-4">
         <div class="form-row">
           <label for="vid_stride" class="label-with-tip">
             vid_stride
@@ -39,6 +39,42 @@
           </label>
           <input type="number" id="vid_stride" name="vid_stride"
                  min="1" max="60" step="1" required value="{{ store.vid_stride | int }}">
+        </div>
+        <div class="form-row">
+          <label for="evidence_scale_width" class="label-with-tip">
+            scale (px)
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: scale"
+              data-tip="Largura máxima do vídeo em pixels (FFmpeg scale=W:-2). Deixe em branco para manter a resolução original. Ex.: 1280 reduz HD para 1280 px de largura.">?</span>
+          </label>
+          <input type="number" id="evidence_scale_width" name="evidence_scale_width"
+                 min="1" max="7680" step="1"
+                 value="{{ store.evidence_scale_width if store.evidence_scale_width is not none else '' }}"
+                 placeholder="original">
+        </div>
+        <div class="form-row">
+          <label for="evidence_ffmpeg_preset" class="label-with-tip">
+            preset
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: preset FFmpeg"
+              data-tip="Velocidade vs compressão do libx264 (run_evidence.py). fast = padrão equilibrado; veryfast/ultrafast = mais rápido e arquivo maior; slow/veryslow = menor arquivo, encode mais lento.">?</span>
+          </label>
+          <select id="evidence_ffmpeg_preset" name="evidence_ffmpeg_preset" required>
+            {% for value in ffmpeg_preset_choices %}
+            <option value="{{ value }}"
+              {% if store.evidence_ffmpeg_preset == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="evidence_crf" class="label-with-tip">
+            crf
+            <span class="field-tip" tabindex="0" role="button"
+              aria-label="Ajuda: crf"
+              data-tip="Constant Rate Factor (0–51): quanto maior, menor o arquivo e menor a qualidade. Default: 28. Valores comuns: 23 (alta), 28 (média), 32 (compacta).">?</span>
+          </label>
+          <input type="number" id="evidence_crf" name="evidence_crf"
+                 min="0" max="51" step="1" required value="{{ store.evidence_crf | int }}">
         </div>
       </div>
       <div class="rules-fields-row rules-fields-row-4">

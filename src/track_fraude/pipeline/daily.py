@@ -178,6 +178,7 @@ def run_pipeline_steps(
     config: PipelineRunConfig,
     *,
     runner: Callable[[list[str]], int] | None = None,
+    on_step_start: Callable[[PipelineStep], None] | None = None,
 ) -> PipelineRunResult:
     steps = filter_pipeline_steps(build_pipeline_steps(config), config)
     if not steps:
@@ -195,6 +196,9 @@ def run_pipeline_steps(
         if config.dry_run:
             result.steps.append(StepResult(step=step, returncode=0, elapsed_sec=0.0, command=command))
             continue
+
+        if on_step_start is not None:
+            on_step_start(step)
 
         started = time.perf_counter()
         returncode = run(command)

@@ -7,7 +7,8 @@ Interface para **cadastro e configuração** — roda separado da máquina de pr
 - Login de usuários
 - CRUD de lojas
 - Configuração de câmeras e OCR ROI
-- (Futuro) revisão de alertas, usuários, etc.
+- **Revisão de alertas** (Fase 8): fila, clips cam1/cam2, confirmar/falso positivo
+- Indicador de **pipeline em execução** nas listagens de grupo/loja
 
 ## Não faz
 

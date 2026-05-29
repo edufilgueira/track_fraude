@@ -12,6 +12,7 @@ from track_fraude.evidence.summary import (
     build_timeline_payload,
 )
 from track_fraude.evidence.video_source import extract_clip_for_range, resolve_video_segments
+from track_fraude.evidence.store_config import evidence_encode_settings_from_store
 from track_fraude.evidence.window import (
     EvidenceWindow,
     compute_checkout_range,
@@ -80,6 +81,8 @@ def build_evidence_pack(
     summary_path.write_text(build_summary_text(alert), encoding="utf-8")
     written.append(summary_path.name)
 
+    encode_settings = evidence_encode_settings_from_store(config)
+
     if not skip_clips:
         for camera_id in (entrance_camera, checkout_camera):
             sync_map = _load_sync_map(processed, date=date, camera_id=camera_id)
@@ -96,6 +99,8 @@ def build_evidence_pack(
                 clip_start=clip_start,
                 clip_end=clip_end,
                 output_path=clip_path,
+                web_compatible=True,
+                encode_settings=encode_settings,
             )
             written.append(clip_path.name)
 
@@ -115,6 +120,8 @@ def build_evidence_pack(
                 clip_start=checkout_start,
                 clip_end=checkout_end,
                 output_path=checkout_clip,
+                web_compatible=True,
+                encode_settings=encode_settings,
             )
             written.append(checkout_clip.name)
 

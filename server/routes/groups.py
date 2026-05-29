@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from server.dependencies import get_group_repo, get_store_repo, get_templates
+from server.dependencies import get_group_repo, get_project_root, get_store_repo, get_templates
+from server.services.pipeline_status import processing_maps
+from server.services.review_loader import has_review_evidence
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -14,6 +16,7 @@ async def list_groups(request: Request) -> HTMLResponse:
     groups = repo.list_groups()
     store_repo = get_store_repo()
     store_counts = {group.id: store_repo.list_stores(group_db_id=group.id) for group in groups}
+    processing_groups, _, _, group_runs = processing_maps()
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -21,6 +24,8 @@ async def list_groups(request: Request) -> HTMLResponse:
         {
             "groups": groups,
             "store_counts": {gid: len(stores) for gid, stores in store_counts.items()},
+            "processing_groups": processing_groups,
+            "group_runs": group_runs,
             "message": request.query_params.get("msg"),
         },
     )
@@ -65,6 +70,12 @@ async def group_detail(request: Request, group_db_id: int) -> HTMLResponse:
 
     store_repo = get_store_repo()
     stores = store_repo.list_stores(group_db_id=group_db_id)
+    project_root = get_project_root()
+    _, processing_stores, store_runs, _ = processing_maps()
+    store_has_review = {
+        store.id: has_review_evidence(project_root, store, group_code=group.group_code)
+        for store in stores
+    }
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -72,6 +83,9 @@ async def group_detail(request: Request, group_db_id: int) -> HTMLResponse:
         {
             "group": group,
             "stores": stores,
+            "processing_stores": processing_stores,
+            "store_runs": store_runs,
+            "store_has_review": store_has_review,
             "message": request.query_params.get("msg"),
         },
     )

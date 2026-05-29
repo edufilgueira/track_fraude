@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS stores (
     checkout_buffer_before_sec REAL NOT NULL DEFAULT 5,
     checkout_buffer_after_sec REAL NOT NULL DEFAULT 5,
     vid_stride INTEGER NOT NULL DEFAULT 5,
+    evidence_scale_width INTEGER,
+    evidence_ffmpeg_preset TEXT NOT NULL DEFAULT 'fast',
+    evidence_crf INTEGER NOT NULL DEFAULT 28,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -88,6 +91,35 @@ CREATE TABLE IF NOT EXISTS camera_zones (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (camera_db_id) REFERENCES cameras(id) ON DELETE CASCADE,
     UNIQUE (camera_db_id, zone_id)
+);
+
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_db_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    current_phase TEXT NOT NULL DEFAULT '',
+    current_camera TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT,
+    FOREIGN KEY (store_db_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS alert_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_db_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    alert_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending_review',
+    reviewer_user_id INTEGER,
+    note TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (store_db_id) REFERENCES stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewer_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE (store_db_id, date, alert_id)
 );
 """
 
@@ -206,6 +238,52 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE stores ADD COLUMN {column} {ddl}")
             store_columns.add(column)
 
+    _migrate_evidence_ffmpeg_settings(conn)
+
+
+def _migrate_evidence_ffmpeg_settings(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, "stores"):
+        return
+
+    store_columns = _column_names(conn, "stores")
+    additions = {
+        "evidence_scale_width": "INTEGER",
+        "evidence_ffmpeg_preset": "TEXT NOT NULL DEFAULT 'fast'",
+        "evidence_crf": "INTEGER NOT NULL DEFAULT 28",
+    }
+    for column, ddl in additions.items():
+        if column not in store_columns:
+            conn.execute(f"ALTER TABLE stores ADD COLUMN {column} {ddl}")
+            store_columns.add(column)
+
+    if "evidence_clip_quality" not in store_columns:
+        return
+
+    mapping = {
+        "normal": (None, "fast", 23),
+        "compact": (1280, "faster", 28),
+        "economy": (960, "veryfast", 32),
+    }
+    rows = conn.execute(
+        "SELECT id, evidence_clip_quality FROM stores WHERE evidence_clip_quality IS NOT NULL"
+    ).fetchall()
+    for row in rows:
+        quality = str(row["evidence_clip_quality"] or "normal").strip().lower()
+        scale, preset, crf = mapping.get(quality, (None, "fast", 28))
+        conn.execute(
+            """
+            UPDATE stores
+            SET evidence_scale_width = ?,
+                evidence_ffmpeg_preset = ?,
+                evidence_crf = ?
+            WHERE id = ?
+              AND evidence_scale_width IS NULL
+              AND evidence_ffmpeg_preset = 'fast'
+              AND evidence_crf = 28
+            """,
+            (scale, preset, crf, int(row["id"])),
+        )
+
 
 def _migrate_cameras_and_zones(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "cameras"):
@@ -256,6 +334,47 @@ def _migrate_cameras_and_zones(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_pipeline_and_review(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, "pipeline_runs"):
+        conn.executescript(
+            """
+            CREATE TABLE pipeline_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                store_db_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                current_phase TEXT NOT NULL DEFAULT '',
+                current_camera TEXT,
+                started_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                finished_at TEXT,
+                FOREIGN KEY (store_db_id) REFERENCES stores(id) ON DELETE CASCADE
+            );
+            """
+        )
+
+    if not _table_exists(conn, "alert_reviews"):
+        conn.executescript(
+            """
+            CREATE TABLE alert_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                store_db_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                alert_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending_review',
+                reviewer_user_id INTEGER,
+                note TEXT NOT NULL DEFAULT '',
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (store_db_id) REFERENCES stores(id) ON DELETE CASCADE,
+                FOREIGN KEY (reviewer_user_id) REFERENCES users(id) ON DELETE SET NULL,
+                UNIQUE (store_db_id, date, alert_id)
+            );
+            """
+        )
+
+
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     if _table_exists(conn, "stores"):
         store_columns = _column_names(conn, "stores")
@@ -277,6 +396,18 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_camera_zones_camera ON camera_zones(camera_db_id)"
         )
+    if _table_exists(conn, "pipeline_runs"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pipeline_runs_store ON pipeline_runs(store_db_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status)"
+        )
+    if _table_exists(conn, "alert_reviews"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_reviews_store_date "
+            "ON alert_reviews(store_db_id, date)"
+        )
 
 
 def init_database(db_path: Path | str | None = None) -> Path:
@@ -285,6 +416,7 @@ def init_database(db_path: Path | str | None = None) -> Path:
         conn.executescript(SCHEMA)
         _migrate_legacy_schema(conn)
         _migrate_cameras_and_zones(conn)
+        _migrate_pipeline_and_review(conn)
         _ensure_indexes(conn)
         conn.commit()
     return path

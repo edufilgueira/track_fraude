@@ -128,6 +128,19 @@ Saídas extras em `data/processed/{group}/{store}/{date}/`: `ingest_report.json`
 
 Opções úteis: `--skip-vision`, `--skip-evidence`, `--pos-api-url http://127.0.0.1:3099`.
 
+Durante a execução, o painel web exibe **Processando** (indicador piscando) no grupo e na loja afetados.
+
+## Fase 8 — Revisão de alertas (painel web)
+
+Após `run_evidence.py`, o botão **Revisão** aparece na listagem de lojas do grupo (`/groups/{id}`).
+
+```text
+/stores/{id}/review/{date}              → fila de alertas
+/stores/{id}/review/{date}/{alert_id}   → clips cam1/cam2 + decisão
+```
+
+Decisões salvas no SQLite (`alert_reviews`: `confirmed` | `dismissed`).
+
 ## Fase 6 — Regras completas (R1–R5)
 
 Requer timelines enriquecidos (`run_events.py`, `run_merge.py`, `run_pos_match.py`).

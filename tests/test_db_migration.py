@@ -80,6 +80,9 @@ def test_migrate_legacy_database_without_group_db_id(tmp_path: Path):
     assert "buffer_before_sec" in columns
     assert "checkout_buffer_after_sec" in columns
     assert "vid_stride" in columns
+    assert "evidence_scale_width" in columns
+    assert "evidence_ffmpeg_preset" in columns
+    assert "evidence_crf" in columns
 
 
 def test_new_store_gets_alert_rule_defaults(tmp_path: Path):
@@ -98,3 +101,6 @@ def test_new_store_gets_alert_rule_defaults(tmp_path: Path):
     assert store.checkout_buffer_before_sec == 5
     assert store.checkout_buffer_after_sec == 5
     assert store.vid_stride == 5
+    assert store.evidence_scale_width is None
+    assert store.evidence_ffmpeg_preset == "fast"
+    assert store.evidence_crf == 28

@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from server.auth import get_current_user_id
 from server.dependencies import configure, get_settings, get_user_repo
-from server.routes import auth, cameras, groups, stores
+from server.routes import auth, cameras, groups, pipeline_api, review, stores
 from server.services.editor_frame_storage import migrate_legacy_data_editor_frames
 from track_fraude_core.db import init_database
 
@@ -78,5 +78,7 @@ def create_app(settings_path: Path | str | None = None) -> FastAPI:
     app.include_router(groups.router)
     app.include_router(stores.router)
     app.include_router(cameras.router)
+    app.include_router(review.router)
+    app.include_router(pipeline_api.router)
 
     return app

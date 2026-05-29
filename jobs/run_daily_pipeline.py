@@ -20,10 +20,13 @@ from track_fraude.cli_store import (
 from track_fraude.pipeline.daily import (
     PIPELINE_PHASES,
     PipelineRunConfig,
+    PipelineRunResult,
+    PipelineStep,
     run_pipeline_steps,
 )
 from track_fraude.pos import DEFAULT_POS_API_URL
 from track_fraude.storage import FilePipelineStateRepository, ProcessedScope, processed_root
+from track_fraude_core.db.pipeline_run_repository import PipelineRunRepository
 
 
 def main() -> None:
@@ -104,7 +107,30 @@ def main() -> None:
         f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}"
     )
 
-    result = run_pipeline_steps(run_config)
+    run_id: int | None = None
+    pipeline_repo = PipelineRunRepository(args.db)
+
+    def on_step_start(step: PipelineStep) -> None:
+        if run_id is not None:
+            pipeline_repo.update_run(
+                run_id,
+                current_phase=step.phase,
+                current_camera=step.camera_id,
+            )
+
+    if not args.dry_run:
+        store_db_id = int(config_store.get("store_db_id") or 0)
+        if store_db_id:
+            run_id = pipeline_repo.start_run(store_db_id, args.date)
+
+    result: PipelineRunResult | None = None
+    try:
+        result = run_pipeline_steps(run_config, on_step_start=on_step_start)
+    finally:
+        if run_id is not None and result is not None:
+            pipeline_repo.finish_run(run_id, ok=result.ok)
+
+    assert result is not None
 
     summary = {
         "date": args.date,

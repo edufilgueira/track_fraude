@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ alert_id }} — Revisão{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ alert_id }}</h2>
+  <p class="hint">
+    {{ store.name }} · {{ date }} · Regras: <strong>{{ rules }}</strong> · {{ lane }}
+    · Score: <strong>{{ alert.suspicion_score if alert.suspicion_score is not none else '—' }}</strong>
+  </p>
+  <p>
+    Status:
+    <span class="badge review-badge-{{ current_status }}">{{ status_labels[current_status] }}</span>
+  </p>
+</div>
+
+<div class="card review-videos">
+  <h2>Clips de evidência</h2>
+  {% if media_urls %}
+  <div class="review-video-grid">
+    {% for filename, url in media_urls.items() %}
+    <div class="review-video-card">
+      <h3>{{ filename }}</h3>
+      <video controls preload="metadata" src="{{ url }}"></video>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">Nenhum clip MP4 neste pacote (rode <code>run_evidence.py</code> sem <code>--skip-clips</code>).</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Resumo</h2>
+  <pre class="review-summary">{{ summary_text or '—' }}</pre>
+</div>
+
+<div class="card">
+  <h2>Timeline da loja</h2>
+  {% if timeline_json %}
+  <ul class="review-timeline">
+    {% for item in timeline_json %}
+    <li><code>{{ item.event }}</code> · {{ item.t }} {% if item.zone_id %}· {{ item.zone_id }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Sem eventos na timeline.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>POS na janela</h2>
+  {% if pos_matches %}
+  <ul class="review-timeline">
+    {% for match in pos_matches %}
+    <li>{{ match }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Nenhuma venda registrada no intervalo.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Decisão do revisor</h2>
+  <form method="post" action="/stores/{{ store.id }}/review/{{ date }}/{{ alert_id }}" class="review-decision-form">
+    <label for="note">Observação (opcional)</label>
+    <textarea id="note" name="note" rows="3">{{ current_note }}</textarea>
+    <div class="actions review-decision-actions">
+      <button type="submit" name="status" value="confirmed" class="btn btn-danger">Confirmar fraude</button>
+      <button type="submit" name="status" value="dismissed" class="btn btn-secondary">Falso positivo</button>
+      <a class="btn btn-secondary" href="/stores/{{ store.id }}/review/{{ date }}">Voltar à fila</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Revisão {{ date }} — {{ store.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Fila de alertas — {{ date }}</h2>
+  <p class="hint">
+    {{ store.name }} ({{ store.store_id }}) · {{ alert_count }} alerta(s)
+  </p>
+  {% if alerts %}
+  <table class="review-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Score</th>
+        <th>Regras</th>
+        <th>Lane</th>
+        <th>Entrada / Saída</th>
+        <th>Revisão</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for alert in alerts %}
+      <tr>
+        <td><strong>{{ alert.alert_id }}</strong></td>
+        <td>{{ alert.score if alert.score is not none else '—' }}</td>
+        <td>{{ alert.rules }}</td>
+        <td>{{ alert.lane }}</td>
+        <td><small>{{ alert.t_start }} → {{ alert.t_end }}</small></td>
+        <td>
+          <span class="badge review-badge-{{ alert.review_status }}">{{ alert.review_label }}</span>
+        </td>
+        <td class="actions">
+          <a class="btn btn-secondary" href="/stores/{{ store.id }}/review/{{ date }}/{{ alert.alert_id }}">Abrir</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nenhum alerta neste dia.</p>
+  {% endif %}
+</div>
+<p class="hint">
+  <a href="/groups/{{ group.id }}">← Voltar ao grupo</a>
+  {% if alert_count %}
+  · <a href="/stores/{{ store.id }}/review/{{ date }}/{{ alerts[0].alert_id }}">Abrir primeiro alerta</a>
+  {% endif %}
+</p>
+{% endblock %}

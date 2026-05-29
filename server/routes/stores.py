@@ -3,8 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from server.dependencies import get_group_repo, get_store_repo, get_templates
+from server.dependencies import get_group_repo, get_project_root, get_store_repo, get_templates
+from server.services.review_loader import has_review_evidence
 from track_fraude_core.db.camera_roles import CAMERA_ROLE_LABELS, CAMERA_ROLE_SUPPORT
+from track_fraude_core.db.evidence_ffmpeg import (
+    FFMPEG_PRESET_CHOICES,
+    evidence_encode_settings,
+)
 
 router = APIRouter(prefix="/stores", tags=["stores"])
 
@@ -28,6 +33,11 @@ async def store_detail(request: Request, store_db_id: int) -> HTMLResponse:
 
     group = get_group_repo().get_group(store.group_db_id)
     cameras = store_repo.list_cameras(store_db_id)
+    has_review = False
+    if group:
+        has_review = has_review_evidence(
+            get_project_root(), store, group_code=group.group_code
+        )
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -37,6 +47,7 @@ async def store_detail(request: Request, store_db_id: int) -> HTMLResponse:
             "group": group,
             "cameras": cameras,
             "role_labels": CAMERA_ROLE_LABELS,
+            "has_review": has_review,
             "message": request.query_params.get("msg"),
         },
     )
@@ -57,6 +68,7 @@ async def store_rules_form(request: Request, store_db_id: int) -> HTMLResponse:
         {
             "store": store,
             "group": group,
+            "ffmpeg_preset_choices": FFMPEG_PRESET_CHOICES,
             "message": request.query_params.get("msg"),
         },
     )
@@ -74,6 +86,9 @@ async def update_store_rules(
     r4_fast_duration_sec: float = Form(...),
     r5_cancelled_delta_sec: int = Form(...),
     vid_stride: int = Form(...),
+    evidence_scale_width: str = Form(""),
+    evidence_ffmpeg_preset: str = Form(...),
+    evidence_crf: int = Form(...),
     buffer_before_sec: float = Form(...),
     buffer_after_sec: float = Form(...),
     checkout_buffer_before_sec: float = Form(...),
@@ -93,6 +108,14 @@ async def update_store_rules(
         raise HTTPException(status_code=400, detail="Confiança visual inválida (0–1)")
     if not (1 <= vid_stride <= 60):
         raise HTTPException(status_code=400, detail="vid_stride inválido (1–60)")
+    try:
+        encode = evidence_encode_settings(
+            scale_width=evidence_scale_width,
+            preset=evidence_ffmpeg_preset,
+            crf=evidence_crf,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     store_repo.update_store(
         store_db_id,
@@ -105,6 +128,9 @@ async def update_store_rules(
         r4_fast_duration_sec=float(r4_fast_duration_sec),
         r5_cancelled_delta_sec=int(r5_cancelled_delta_sec),
         vid_stride=int(vid_stride),
+        evidence_scale_width=encode.scale_width,
+        evidence_ffmpeg_preset=encode.preset,
+        evidence_crf=encode.crf,
         buffer_before_sec=float(buffer_before_sec),
         buffer_after_sec=float(buffer_after_sec),
         checkout_buffer_before_sec=float(checkout_buffer_before_sec),

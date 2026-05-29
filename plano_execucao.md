@@ -308,12 +308,13 @@ Operador revisa fila de alertas sem abrir pastas manualmente.
 - Lista: data, score, regras, horários entrada/saída, lane
 - Detalhe: timeline, POS, player 2 clips (cam1 | cam2)
 - Status: `pending_review` | `confirmed` | `dismissed`
-- Persistir decisão (JSON ou SQLite inicial)
+- Persistir decisão no SQLite (`alert_reviews`)
+- Indicador visual de pipeline em execução (grupos/lojas)
 
 ### Critério de conclusão
-- [ ] Revisor processa 10 alertas do dia na UI  
-- [ ] Marca falso positivo / confirmado  
-- [ ] Link direto para clips  
+- [x] Revisor processa 10 alertas do dia na UI  
+- [x] Marca falso positivo / confirmado  
+- [x] Link direto para clips  
 
 ### Dependências
 Fase 5–7 (7b recomendada antes de produção 24 h, mas não bloqueia UI).

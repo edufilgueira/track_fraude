@@ -22,6 +22,9 @@
   </p>
   <div class="actions" style="margin-top:12px">
     <a class="btn" href="/stores/{{ store.id }}/cameras/new">+ Câmera</a>
+    {% if has_review %}
+    <a class="btn" href="/stores/{{ store.id }}/review">Revisão</a>
+    {% endif %}
     <a class="btn btn-secondary" href="/stores/{{ store.id }}/rules">Regras</a>
     <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Voltar</a>
   </div>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Revisão — {{ store.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Revisão de alertas</h2>
+  <p class="hint">
+    Loja <strong>{{ store.store_id }}</strong> · Grupo {{ group.name }}
+  </p>
+  {% if dates %}
+  <p class="hint">Selecione o dia com evidências geradas:</p>
+  <ul class="review-date-list">
+    {% for day in dates %}
+    <li><a class="btn btn-secondary" href="/stores/{{ store.id }}/review/{{ day }}">{{ day }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Nenhuma evidência encontrada. Execute o pipeline até a fase <code>evidence</code>.</p>
+  {% endif %}
+</div>
+<p class="hint"><a href="/groups/{{ group.id }}">← Voltar ao grupo</a></p>
+{% endblock %}

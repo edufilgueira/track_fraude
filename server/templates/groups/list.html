@@ -20,11 +20,17 @@
         <td><strong>{{ group.group_code }}</strong></td>
         <td>{{ group.name }}</td>
         <td>{{ store_counts.get(group.id, 0) }}</td>
-        <td>
-          {% if group.active %}
-          <span class="badge badge-active">Ativo</span>
-          {% else %}
+        <td class="status-cell" data-group-id="{{ group.id }}"{% if not group.active %} data-inactive="1"{% endif %}>
+          {% if not group.active %}
           <span class="badge badge-inactive">Inativo</span>
+          {% elif group.id in processing_groups %}
+            {% set processing = true %}
+            {% set active = true %}
+            {% set run = group_runs.get(group.id) %}
+            {% set phase_hint = run.current_phase if run else '' %}
+            {% include "partials/entity_status.html" %}
+          {% else %}
+          <span class="badge badge-active">Ativo</span>
           {% endif %}
         </td>
         <td class="actions">
@@ -39,4 +45,7 @@
   <p class="empty">Nenhum grupo cadastrado. Clique em <strong>Novo grupo</strong> para começar.</p>
   {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/pipeline_status.js"></script>
 {% endblock %}

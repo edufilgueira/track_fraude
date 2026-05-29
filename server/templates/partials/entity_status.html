@@ -1,0 +1,10 @@
+{% if processing %}
+<span class="badge badge-processing" title="{{ phase_hint or 'Pipeline em execução' }}">
+  <span class="status-dot pulse" aria-hidden="true"></span>
+  Processando{% if phase_hint %} · {{ phase_hint }}{% endif %}
+</span>
+{% elif active %}
+<span class="badge badge-active">Ativo</span>
+{% else %}
+<span class="badge badge-inactive">Inativo</span>
+{% endif %}

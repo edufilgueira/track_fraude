@@ -17,6 +17,8 @@ from track_fraude_core.db.alert_rule_defaults import (
     CHECKOUT_BUFFER_AFTER_SEC,
     CHECKOUT_BUFFER_BEFORE_SEC,
     ENABLE_R4,
+    EVIDENCE_CRF,
+    EVIDENCE_FFMPEG_PRESET,
     POS_MATCH_DELTA_SEC,
     R1_MIN_CHECKOUT_DURATION_SEC,
     R3_VISUAL_MARGIN,
@@ -58,6 +60,9 @@ class StoreRecord:
     checkout_buffer_before_sec: float
     checkout_buffer_after_sec: float
     vid_stride: int
+    evidence_scale_width: int | None
+    evidence_ffmpeg_preset: str
+    evidence_crf: int
     active: bool
 
 
@@ -152,6 +157,15 @@ class StoreRepository:
             if "checkout_buffer_after_sec" in keys
             else CHECKOUT_BUFFER_AFTER_SEC,
             vid_stride=int(row["vid_stride"]) if "vid_stride" in keys else VID_STRIDE,
+            evidence_scale_width=int(row["evidence_scale_width"])
+            if "evidence_scale_width" in keys and row["evidence_scale_width"] is not None
+            else None,
+            evidence_ffmpeg_preset=str(row["evidence_ffmpeg_preset"])
+            if "evidence_ffmpeg_preset" in keys
+            else EVIDENCE_FFMPEG_PRESET,
+            evidence_crf=int(row["evidence_crf"])
+            if "evidence_crf" in keys
+            else EVIDENCE_CRF,
             active=bool(row["active"]),
         )
 
@@ -274,6 +288,9 @@ class StoreRepository:
         checkout_buffer_before_sec: float = CHECKOUT_BUFFER_BEFORE_SEC,
         checkout_buffer_after_sec: float = CHECKOUT_BUFFER_AFTER_SEC,
         vid_stride: int = VID_STRIDE,
+        evidence_scale_width: int | None = None,
+        evidence_ffmpeg_preset: str = EVIDENCE_FFMPEG_PRESET,
+        evidence_crf: int = EVIDENCE_CRF,
         active: bool = True,
     ) -> StoreRecord:
         with self._conn() as conn:
@@ -289,9 +306,9 @@ class StoreRepository:
                     r5_cancelled_delta_sec,
                     buffer_before_sec, buffer_after_sec,
                     checkout_buffer_before_sec, checkout_buffer_after_sec,
-                    vid_stride,
+                    vid_stride, evidence_scale_width, evidence_ffmpeg_preset, evidence_crf,
                     active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     group_db_id,
@@ -320,6 +337,9 @@ class StoreRepository:
                     float(checkout_buffer_before_sec),
                     float(checkout_buffer_after_sec),
                     int(vid_stride),
+                    evidence_scale_width,
+                    str(evidence_ffmpeg_preset).strip().lower(),
+                    int(evidence_crf),
                     1 if active else 0,
                 ),
             )
@@ -357,6 +377,9 @@ class StoreRepository:
             "checkout_buffer_before_sec",
             "checkout_buffer_after_sec",
             "vid_stride",
+            "evidence_scale_width",
+            "evidence_ffmpeg_preset",
+            "evidence_crf",
             "active",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -633,6 +656,7 @@ class StoreRepository:
         zones_payload = self.build_zones_payload(store, group_code=group_code)
 
         return {
+            "store_db_id": store.id,
             "group_code": group_code,
             "store_id": store.store_id,
             "timezone": store.timezone,
@@ -678,6 +702,9 @@ class StoreRepository:
                 "buffer_after_sec": store.buffer_after_sec,
                 "checkout_buffer_before_sec": store.checkout_buffer_before_sec,
                 "checkout_buffer_after_sec": store.checkout_buffer_after_sec,
+                "scale_width": store.evidence_scale_width,
+                "ffmpeg_preset": store.evidence_ffmpeg_preset,
+                "crf": store.evidence_crf,
             },
             "track": {
                 "vid_stride": store.vid_stride,
