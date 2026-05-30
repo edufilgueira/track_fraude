@@ -38,7 +38,7 @@ def main() -> None:
         "--delta-sec",
         type=int,
         default=None,
-        help="Margem δ em segundos (default: pos_match_delta_sec da loja)",
+        help="Margem delta em segundos (default: pos_match_delta_sec da loja)",
     )
     args = parser.parse_args()
 
@@ -84,7 +84,7 @@ def main() -> None:
         if session.get("pos_matches")
     )
     print(f"timelines atualizado em: {timelines_path}")
-    print(f"sessões com venda POS: {matched_sessions} | δ={delta_sec}s")
+    print(f"sessoes com venda POS: {matched_sessions} | delta={delta_sec}s")
 
 
 if __name__ == "__main__":

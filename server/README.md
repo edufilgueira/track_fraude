@@ -9,6 +9,7 @@ Interface para **cadastro e configuração** — roda separado da máquina de pr
 - Configuração de câmeras e OCR ROI
 - **Revisão de alertas** (Fase 8): fila, clips cam1/cam2, confirmar/falso positivo
 - Indicador de **pipeline em execução** nas listagens de grupo/loja
+- **Console ao vivo** abaixo da loja durante o processamento (espelho do log do pipeline)
 
 ## Não faz
 

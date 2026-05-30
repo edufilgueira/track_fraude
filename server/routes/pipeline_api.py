@@ -4,9 +4,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from server.dependencies import get_group_repo, get_project_root, get_pipeline_run_repo, get_store_repo
+from server.services.review_loader import has_review_evidence
 from server.services.pipeline_runner import (
     cancel_daily_pipeline,
     raw_dates_payload,
+    read_pipeline_log,
     start_daily_pipeline,
 )
 from server.services.video_storage import raw_store_dir
@@ -79,7 +81,7 @@ async def run_store_pipeline(store_db_id: int, body: RunPipelineBody) -> dict:
         raise HTTPException(status_code=409, detail="Pipeline já em execução para esta loja")
 
     try:
-        run_id = start_daily_pipeline(
+        run_id, log_path = start_daily_pipeline(
             project_root=get_project_root(),
             store_db_id=store_db_id,
             group_code=group.group_code,
@@ -91,7 +93,36 @@ async def run_store_pipeline(store_db_id: int, body: RunPipelineBody) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    return {"ok": True, "date": body.date, "run_id": run_id}
+    project_root = get_project_root()
+    try:
+        log_rel = log_path.relative_to(project_root).as_posix()
+    except ValueError:
+        log_rel = log_path.as_posix()
+
+    return {"ok": True, "date": body.date, "run_id": run_id, "log_path": log_rel}
+
+
+@router.get("/stores/{store_db_id}/log")
+async def store_pipeline_log(
+    store_db_id: int,
+    offset: int = 0,
+) -> dict:
+    store_repo = get_store_repo()
+    store = store_repo.get_store(store_db_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+
+    project_root = get_project_root()
+    payload = read_pipeline_log(
+        project_root=project_root,
+        store_db_id=store_db_id,
+        offset=max(0, offset),
+    )
+    run = get_pipeline_run_repo().get_running_for_store(store_db_id)
+    if run is not None:
+        payload["current_phase"] = run.current_phase
+        payload["date"] = run.date
+    return payload
 
 
 @router.post("/stores/{store_db_id}/cancel")
@@ -105,3 +136,21 @@ async def cancel_store_pipeline(store_db_id: int) -> dict:
     if not cancelled:
         raise HTTPException(status_code=404, detail="Nenhuma execução em andamento")
     return {"ok": True, "cancelled": True}
+
+
+@router.get("/stores/{store_db_id}/review-available")
+async def store_review_available(store_db_id: int) -> dict:
+    store_repo = get_store_repo()
+    group_repo = get_group_repo()
+    store = store_repo.get_store(store_db_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+    group = group_repo.get_group(store.group_db_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo não encontrado")
+    project_root = get_project_root()
+    return {
+        "has_review": has_review_evidence(
+            project_root, store, group_code=group.group_code
+        ),
+    }

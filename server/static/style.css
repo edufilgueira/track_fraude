@@ -32,7 +32,7 @@ a:hover {
 }
 
 .container {
-  max-width: 960px;
+  max-width: 1024px;
   margin: 0 auto;
   padding: 24px 20px 48px;
 }
@@ -336,6 +336,60 @@ th {
 
 .pipeline-date-option:hover {
   background: var(--border);
+}
+
+.pipeline-console-row td {
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.pipeline-console {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.pipeline-console-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #0b1018;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.pipeline-console-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pipeline-console-meta {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.pipeline-console-close {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.pipeline-console-body {
+  margin: 0;
+  padding: 12px 14px;
+  min-height: 120px;
+  max-height: 320px;
+  overflow: auto;
+  background: #05080f;
+  color: #c7d2e3;
+  font-family: Consolas, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .form-grid {

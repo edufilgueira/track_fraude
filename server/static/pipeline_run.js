@@ -141,7 +141,16 @@
             );
           }
           if (dates.length === 1) {
-            return startPipeline(storeDbId, dates[0].id).then(function () {
+            return startPipeline(storeDbId, dates[0].id).then(function (payload) {
+              document.dispatchEvent(
+                new CustomEvent("pipeline-started", {
+                  detail: {
+                    storeDbId: storeDbId,
+                    date: payload.date,
+                    runId: payload.run_id,
+                  },
+                })
+              );
               refreshStatusSoon();
             });
           }
@@ -171,7 +180,16 @@
       closeAllMenus();
       runBtn.disabled = true;
       startPipeline(storeDbId, date)
-        .then(function () {
+        .then(function (payload) {
+          document.dispatchEvent(
+            new CustomEvent("pipeline-started", {
+              detail: {
+                storeDbId: storeDbId,
+                date: payload.date,
+                runId: payload.run_id,
+              },
+            })
+          );
           refreshStatusSoon();
         })
         .catch(function (error) {

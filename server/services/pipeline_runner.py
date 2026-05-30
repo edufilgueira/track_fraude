@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import threading
@@ -12,6 +13,7 @@ from server.services.worker_python import resolve_worker_python
 
 _lock = threading.Lock()
 _running: dict[int, subprocess.Popen] = {}
+_log_files: dict[int, Path] = {}
 
 
 def _log_path(project_root: Path, store_db_id: int, date: str) -> Path:
@@ -48,6 +50,63 @@ def _watch_process(store_db_id: int, proc: subprocess.Popen, run_id: int) -> Non
     repo = get_pipeline_run_repo()
     if repo.get_running_for_store(store_db_id) is not None:
         repo.finish_run(run_id, ok=False)
+
+
+def _find_latest_log(project_root: Path, store_db_id: int) -> Path | None:
+    logs_dir = project_root / "data" / "logs"
+    if not logs_dir.is_dir():
+        return None
+    matches = sorted(
+        logs_dir.glob(f"pipeline_{store_db_id}_*.log"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
+def resolve_log_path(project_root: Path, store_db_id: int) -> Path | None:
+    with _lock:
+        tracked = _log_files.get(store_db_id)
+    if tracked is not None and tracked.is_file():
+        return tracked
+    return _find_latest_log(project_root, store_db_id)
+
+
+def read_pipeline_log(
+    *,
+    project_root: Path,
+    store_db_id: int,
+    offset: int = 0,
+) -> dict:
+    repo = get_pipeline_run_repo()
+    running = repo.is_store_running(store_db_id) or is_store_running_locally(store_db_id)
+    path = resolve_log_path(project_root, store_db_id)
+    if path is None:
+        return {
+            "content": "",
+            "offset": 0,
+            "running": running,
+            "has_log": False,
+        }
+
+    safe_offset = max(0, offset)
+    with path.open("rb") as handle:
+        handle.seek(safe_offset)
+        chunk = handle.read(128 * 1024)
+        new_offset = safe_offset + len(chunk)
+
+    try:
+        log_path_display = path.relative_to(project_root).as_posix()
+    except ValueError:
+        log_path_display = path.as_posix()
+
+    return {
+        "content": chunk.decode("utf-8", errors="replace"),
+        "offset": new_offset,
+        "running": running,
+        "has_log": True,
+        "log_path": log_path_display,
+    }
 
 
 def is_store_running_locally(store_db_id: int) -> bool:
@@ -115,6 +174,11 @@ def start_daily_pipeline(
         "cwd": str(project_root),
         "stdout": log_handle,
         "stderr": subprocess.STDOUT,
+        "env": {
+            **os.environ,
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+        },
     }
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -129,6 +193,7 @@ def start_daily_pipeline(
 
     with _lock:
         _running[store_db_id] = proc
+        _log_files[store_db_id] = log_file_path
 
     watcher = threading.Thread(
         target=_watch_process,
@@ -136,7 +201,7 @@ def start_daily_pipeline(
         daemon=True,
     )
     watcher.start()
-    return run_id
+    return run_id, log_file_path
 
 
 def cancel_daily_pipeline(*, store_db_id: int) -> bool:
@@ -154,6 +219,14 @@ def cancel_daily_pipeline(*, store_db_id: int) -> bool:
     if run is not None:
         repo.cancel_run(run.id)
         cancelled = True
+
+    with _lock:
+        log_path = _log_files.get(store_db_id)
+    if log_path is not None and log_path.is_file():
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"\n--- cancelado pelo usuário {datetime.now().isoformat()} ---\n"
+            )
 
     return cancelled
 

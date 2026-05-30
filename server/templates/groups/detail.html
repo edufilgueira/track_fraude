@@ -24,7 +24,7 @@
     </thead>
     <tbody>
       {% for store in stores %}
-      <tr>
+      <tr class="store-row" data-store-id="{{ store.id }}">
         <td><strong>{{ store.store_id }}</strong></td>
         <td>{{ store.name }}</td>
         <td>{{ store.city or '—' }}{% if store.state %} / {{ store.state }}{% endif %}</td>
@@ -59,10 +59,24 @@
           </span>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}">Configurar</a>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}/rules">Regras</a>
+          <span class="review-link-wrap" data-store-id="{{ store.id }}">
           {% if store_has_review.get(store.id) %}
-          <a class="btn" href="/stores/{{ store.id }}/review">Revisão</a>
+          <a class="btn review-link-btn" href="/stores/{{ store.id }}/review">Revisão</a>
           {% endif %}
+          </span>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}/edit">Editar</a>
+        </td>
+      </tr>
+      <tr class="pipeline-console-row" data-store-id="{{ store.id }}" hidden>
+        <td colspan="5">
+          <div class="pipeline-console">
+            <div class="pipeline-console-bar">
+              <span class="pipeline-console-title">Pipeline — {{ store.store_id }}</span>
+              <span class="pipeline-console-meta"></span>
+              <button type="button" class="btn btn-secondary pipeline-console-close">Fechar</button>
+            </div>
+            <pre class="pipeline-console-body" aria-live="polite"></pre>
+          </div>
         </td>
       </tr>
       {% endfor %}
@@ -79,5 +93,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/pipeline_status.js"></script>
+<script src="/static/pipeline_console.js"></script>
 <script src="/static/pipeline_run.js"></script>
 {% endblock %}
