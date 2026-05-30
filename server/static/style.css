@@ -273,6 +273,69 @@ th {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.pipeline-run-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.btn-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pipeline-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.pipeline-btn-running {
+  background: var(--danger);
+}
+
+.pipeline-btn-running:hover {
+  background: #dc2626;
+}
+
+.pipeline-date-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pipeline-date-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.pipeline-date-option:hover {
+  background: var(--border);
 }
 
 .form-grid {

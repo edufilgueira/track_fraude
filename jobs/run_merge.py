@@ -77,10 +77,18 @@ def main() -> None:
         entrance_manifest = scope.manifest_path(args.date, entrance_camera)
         checkout_manifest = scope.manifest_path(args.date, checkout_camera)
         entrance_video = load_video_path_from_manifest(entrance_manifest) or resolve_video_path(
-            ROOT, date=args.date, camera_id=entrance_camera
+            ROOT,
+            date=args.date,
+            camera_id=entrance_camera,
+            store_id=config["store_id"],
+            group_code=config.get("group_code"),
         )
         checkout_video = load_video_path_from_manifest(checkout_manifest) or resolve_video_path(
-            ROOT, date=args.date, camera_id=checkout_camera
+            ROOT,
+            date=args.date,
+            camera_id=checkout_camera,
+            store_id=config["store_id"],
+            group_code=config.get("group_code"),
         )
 
     persons_doc, links_doc = build_persons_document(

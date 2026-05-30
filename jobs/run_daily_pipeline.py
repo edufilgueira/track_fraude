@@ -79,6 +79,12 @@ def main() -> None:
         action="store_true",
         help="Lista comandos sem executar",
     )
+    parser.add_argument(
+        "--run-id",
+        type=int,
+        default=None,
+        help="ID de execução já registrado no SQLite (painel web)",
+    )
     args = parser.parse_args()
 
     config_store = load_job_store_config(args)
@@ -120,15 +126,17 @@ def main() -> None:
 
     if not args.dry_run:
         store_db_id = int(config_store.get("store_db_id") or 0)
-        if store_db_id:
+        if args.run_id is not None:
+            run_id = args.run_id
+        elif store_db_id:
             run_id = pipeline_repo.start_run(store_db_id, args.date)
 
     result: PipelineRunResult | None = None
     try:
         result = run_pipeline_steps(run_config, on_step_start=on_step_start)
     finally:
-        if run_id is not None and result is not None:
-            pipeline_repo.finish_run(run_id, ok=result.ok)
+        if run_id is not None:
+            pipeline_repo.finish_run(run_id, ok=bool(result and result.ok))
 
     assert result is not None
 

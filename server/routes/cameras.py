@@ -7,7 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from server.dependencies import get_store_repo, get_templates
+from server.dependencies import get_group_repo, get_store_repo, get_templates
 from server.services.editor_frame_storage import (
     editor_frame_exists,
     editor_frame_jpeg_path,
@@ -48,6 +48,12 @@ class ZonePayload(BaseModel):
 class EntryVectorPayload(BaseModel):
     zone_id: str
     entry_vector: list[float]
+
+
+def _store_raw_scope(store) -> tuple[str, str]:
+    group = get_group_repo().get_group(store.group_db_id)
+    group_code = group.group_code if group else "default"
+    return group_code, store.store_id
 
 
 def _get_camera_or_404(store_db_id: int, camera_db_id: int):
@@ -146,23 +152,46 @@ def _persist_editor_frame(
     )
 
 
-def _extract_storage_frame(camera_id: str, date: str, seconds: float) -> Response:
-    video_path = raw_video_path(date=date, camera_id=camera_id)
+def _extract_storage_frame(
+    *,
+    group_code: str,
+    store_id: str,
+    camera_id: str,
+    date: str,
+    seconds: float,
+) -> Response:
+    video_path = raw_video_path(
+        group_code=group_code,
+        store_id=store_id,
+        date=date,
+        camera_id=camera_id,
+    )
     if not video_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Vídeo não encontrado: {raw_video_relpath(date=date, camera_id=camera_id)}",
+            detail=raw_video_relpath(
+                group_code=group_code,
+                store_id=store_id,
+                date=date,
+                camera_id=camera_id,
+            ),
         )
     try:
         jpeg, width, height, duration_sec = extract_frame_jpeg(video_path, seconds=seconds)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    relpath = raw_video_relpath(
+        group_code=group_code,
+        store_id=store_id,
+        date=date,
+        camera_id=camera_id,
+    )
     return _jpeg_frame_response(
         jpeg,
         width=width,
         height=height,
         duration_sec=duration_sec,
-        video_path=raw_video_relpath(date=date, camera_id=camera_id),
+        video_path=relpath,
     )
 
 
@@ -190,8 +219,14 @@ async def roi_editor_page(
     date: str | None = Query(default=None, description="Data da gravação YYYY-MM-DD"),
 ) -> HTMLResponse:
     store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    group_code, store_code = _store_raw_scope(store)
     default_video_date = (date or "2026-05-22").strip()
-    video_path = raw_video_path(date=default_video_date, camera_id=camera.camera_id)
+    video_path = raw_video_path(
+        group_code=group_code,
+        store_id=store_code,
+        date=default_video_date,
+        camera_id=camera.camera_id,
+    )
     video_available = video_path.exists()
     video_duration = _video_duration_sec(video_path) if video_available else None
     templates = get_templates()
@@ -204,8 +239,13 @@ async def roi_editor_page(
             "default_video_date": default_video_date,
             "video_available": video_available,
             "video_duration": video_duration,
+            "group_code": group_code,
+            "store_code": store_code,
             "video_relpath": raw_video_relpath(
-                date=default_video_date, camera_id=camera.camera_id
+                group_code=group_code,
+                store_id=store_code,
+                date=default_video_date,
+                camera_id=camera.camera_id,
             ),
             **_editor_frame_page_context(store_db_id, camera_db_id, camera.camera_id),
         },
@@ -249,7 +289,8 @@ async def upload_camera_frame(
     date: str | None = Form(default=None),
 ) -> Response:
     """Extrai frame no servidor (fallback para codecs que o navegador não reproduz)."""
-    _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    group_code, store_code = _store_raw_scope(store)
 
     suffix = Path(video.filename or "video.mp4").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -273,8 +314,19 @@ async def upload_camera_frame(
         jpeg, width, height, duration_sec = extract_frame_jpeg(tmp_path, seconds=seconds)
 
         if video_date:
-            copy_raw_video(date=video_date, camera_id=camera.camera_id, source=tmp_path)
-            video_relpath = raw_video_relpath(date=video_date, camera_id=camera.camera_id)
+            copy_raw_video(
+                group_code=group_code,
+                store_id=store_code,
+                date=video_date,
+                camera_id=camera.camera_id,
+                source=tmp_path,
+            )
+            video_relpath = raw_video_relpath(
+                group_code=group_code,
+                store_id=store_code,
+                date=video_date,
+                camera_id=camera.camera_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
@@ -336,9 +388,16 @@ async def frame_preview(
     date: str = Query(..., description="YYYY-MM-DD"),
     seconds: float = Query(0.0, ge=0),
 ) -> Response:
-    """Preview JPEG via URL (img src) — lê data/raw/video/{date}/{camera}.mp4."""
-    _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
-    return _extract_storage_frame(camera.camera_id, date, seconds)
+    """Preview JPEG via URL (img src) — lê vídeo em data/raw/{group}/{store}/{date}/."""
+    store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    group_code, store_code = _store_raw_scope(store)
+    return _extract_storage_frame(
+        group_code=group_code,
+        store_id=store_code,
+        camera_id=camera.camera_id,
+        date=date,
+        seconds=seconds,
+    )
 
 
 @router.post("/{store_db_id}/cameras/{camera_db_id}/frame-from-storage")
@@ -349,19 +408,35 @@ async def frame_from_storage(
     seconds: float = Form(0.0),
 ) -> Response:
     """Extrai frame do vídeo local e salva no servidor (o MP4 original é mantido)."""
-    _store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
-    video_path = raw_video_path(date=date, camera_id=camera.camera_id)
+    store, camera, _repo = _get_camera_or_404(store_db_id, camera_db_id)
+    group_code, store_code = _store_raw_scope(store)
+    video_path = raw_video_path(
+        group_code=group_code,
+        store_id=store_code,
+        date=date,
+        camera_id=camera.camera_id,
+    )
     if not video_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Vídeo não encontrado: {raw_video_relpath(date=date, camera_id=camera.camera_id)}",
+            detail=raw_video_relpath(
+                group_code=group_code,
+                store_id=store_code,
+                date=date,
+                camera_id=camera.camera_id,
+            ),
         )
     try:
         jpeg, width, height, duration_sec = extract_frame_jpeg(video_path, seconds=seconds)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    relpath = raw_video_relpath(date=date, camera_id=camera.camera_id)
+    relpath = raw_video_relpath(
+        group_code=group_code,
+        store_id=store_code,
+        date=date,
+        camera_id=camera.camera_id,
+    )
     return _persist_editor_frame(
         store_db_id=store_db_id,
         camera_db_id=camera_db_id,
@@ -396,7 +471,13 @@ async def zone_editor_page(
         )
 
     default_video_date = (date or "2026-05-22").strip()
-    video_path = raw_video_path(date=default_video_date, camera_id=camera.camera_id)
+    group_code, store_code = _store_raw_scope(store)
+    video_path = raw_video_path(
+        group_code=group_code,
+        store_id=store_code,
+        date=default_video_date,
+        camera_id=camera.camera_id,
+    )
     video_available = video_path.exists()
     video_duration = _video_duration_sec(video_path) if video_available else None
     templates = get_templates()
@@ -410,8 +491,13 @@ async def zone_editor_page(
             "default_video_date": default_video_date,
             "video_available": video_available,
             "video_duration": video_duration,
+            "group_code": group_code,
+            "store_code": store_code,
             "video_relpath": raw_video_relpath(
-                date=default_video_date, camera_id=camera.camera_id
+                group_code=group_code,
+                store_id=store_code,
+                date=default_video_date,
+                camera_id=camera.camera_id,
             ),
             "existing_zones": _zones_for_response(repo, camera_db_id),
             **_editor_frame_page_context(store_db_id, camera_db_id, camera.camera_id),

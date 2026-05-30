@@ -1,5 +1,5 @@
 (function () {
-  const POLL_MS = 4000;
+  const POLL_MS = 2000;
 
   function escapeHtml(text) {
     const div = document.createElement("div");
@@ -26,7 +26,7 @@
     try {
       const response = await fetch("/api/pipeline/status");
       if (!response.ok) {
-        return;
+        return null;
       }
       const data = await response.json();
       const groups = new Set(data.groups_processing || []);
@@ -65,10 +65,23 @@
           cell.innerHTML = activeBadge("Ativa");
         }
       });
+
+      document.dispatchEvent(
+        new CustomEvent("pipeline-status-update", {
+          detail: {
+            stores_processing: data.stores_processing || [],
+            running: data.running || [],
+          },
+        })
+      );
+      return data;
     } catch (error) {
       console.debug("pipeline status poll failed", error);
+      return null;
     }
   }
+
+  window.refreshPipelineStatus = refresh;
 
   if (document.querySelector(".status-cell")) {
     refresh();

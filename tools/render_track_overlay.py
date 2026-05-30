@@ -62,7 +62,12 @@ def main() -> None:
         )
 
     video_path = resolve_video_path(
-        ROOT, date=args.date, camera_id=args.camera, video=args.video
+        ROOT,
+        date=args.date,
+        camera_id=args.camera,
+        store_id=config["store_id"],
+        group_code=config.get("group_code"),
+        video=args.video,
     )
     if not video_path.exists():
         raise FileNotFoundError(f"Vídeo não encontrado: {video_path}")

@@ -10,7 +10,7 @@ from track_fraude.ingest import save_ingest_report, validate_day_ingest
 
 def test_validate_day_ingest_ok_with_default_videos(tmp_path: Path):
     date = "2026-05-22"
-    raw_dir = tmp_path / "data" / "raw" / "video" / date
+    raw_dir = tmp_path / "data" / "raw" / "default" / "LOJA-01" / date
     raw_dir.mkdir(parents=True)
     (raw_dir / "cam1.mp4").write_bytes(b"fake")
     (raw_dir / "cam2.mp4").write_bytes(b"fake")
@@ -45,7 +45,7 @@ def test_validate_day_ingest_ok_with_default_videos(tmp_path: Path):
 
 def test_validate_day_ingest_missing_video_is_error(tmp_path: Path):
     date = "2026-05-22"
-    raw_dir = tmp_path / "data" / "raw" / "video" / date
+    raw_dir = tmp_path / "data" / "raw" / "default" / "LOJA-01" / date
     raw_dir.mkdir(parents=True)
 
     report = validate_day_ingest(

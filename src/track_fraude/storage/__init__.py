@@ -11,11 +11,14 @@ from track_fraude.storage.file_repository import (
 from track_fraude.storage.paths import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_PROCESSED_DIR,
+    DEFAULT_RAW_DIR,
     OutputScope,
     ProcessedScope,
+    RawScope,
     StoreScope,
     output_root,
     processed_root,
+    raw_root,
 )
 
 __all__ = [
@@ -27,9 +30,12 @@ __all__ = [
     "FileTrackRepository",
     "DEFAULT_OUTPUT_DIR",
     "DEFAULT_PROCESSED_DIR",
+    "DEFAULT_RAW_DIR",
     "StoreScope",
     "ProcessedScope",
+    "RawScope",
     "OutputScope",
     "output_root",
     "processed_root",
+    "raw_root",
 ]

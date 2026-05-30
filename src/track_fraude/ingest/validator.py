@@ -11,6 +11,7 @@ from track_fraude.evidence.video_source import (
     load_raw_day_manifest,
 )
 from track_fraude.pos.factory import create_pos_client
+from track_fraude.storage import RawScope, raw_root
 from track_fraude.video_paths import resolve_video_path
 
 
@@ -60,6 +61,8 @@ def _camera_video_paths(
     raw_day_dir: Path,
     date: str,
     camera_id: str,
+    store_id: str,
+    group_code: str,
     manifest: dict[str, Any] | None,
 ) -> list[Path]:
     if manifest:
@@ -76,7 +79,12 @@ def _camera_video_paths(
                 return [segment.path for segment in segments]
 
     default_path = resolve_video_path(
-        project_root, date=date, camera_id=camera_id, video=None
+        project_root,
+        date=date,
+        camera_id=camera_id,
+        store_id=store_id,
+        group_code=group_code,
+        video=None,
     )
     return [default_path]
 
@@ -91,7 +99,11 @@ def validate_day_ingest(
     pos_root: Path | str,
     pos_api_url: str | None = None,
 ) -> IngestReport:
-    raw_day_dir = project_root / "data" / "raw" / "video" / date
+    scope = RawScope.from_config(
+        raw_root(project_root),
+        {"group_code": group_code, "store_id": store_id},
+    )
+    raw_day_dir = scope.date_dir(date)
     report = IngestReport(
         date=date,
         store_id=store_id,
@@ -117,6 +129,8 @@ def validate_day_ingest(
             raw_day_dir=raw_day_dir,
             date=date,
             camera_id=camera_id,
+            store_id=store_id,
+            group_code=group_code,
             manifest=manifest,
         )
         existing = [path for path in paths if path.is_file()]

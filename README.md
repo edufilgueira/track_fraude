@@ -23,7 +23,7 @@ jobs/ + src/            ← processamento de vídeo (OpenCV, Tesseract)
 data/
   track_fraude.db       ← grupos, lojas, câmeras, usuários
   pos/                  ← vendas simuladas
-  raw/video/            ← gravações
+  raw/{group}/{store}/{date}/  ← gravações por loja
   processed/            ← sync_map, tracks, events, alertas, pipeline_state
   output/               ← reservado (exportações / revisão — fases futuras)
 ```
@@ -106,7 +106,7 @@ Próximo passo: **Fase 7b** — YOLO só com presença na ROI (`vid_stride=5` no
 Orquestra todos os jobs (Fases 1–6) em um comando. Lê loja/câmeras do **SQLite** (`--store-id`, `--group-code`).
 
 ```powershell
-# Dia completo (requer vídeos em data/raw/video/{date}/cam1.mp4 e cam2.mp4)
+# Dia completo (requer vídeos em data/raw/default/LOJA-01/{date}/cam1.mp4 e cam2.mp4)
 python jobs/run_daily_pipeline.py --date 2026-05-22 --store-id LOJA-01 --group-code default
 
 # Só listar comandos
@@ -171,7 +171,7 @@ Quando **R1 e R2** disparam na **mesma visita**, o motor gera **um único alerta
 
 ## Fase 5 — Pacotes de evidência (clips)
 
-Requer alertas (`run_alerts.py`) e vídeos em `data/raw/video/{date}/` (ou `manifest.json` com chunks).
+Requer alertas (`run_alerts.py`) e vídeos em `data/raw/{group}/{store}/{date}/` (ou `manifest.json` com chunks).
 
 ```powershell
 python jobs/run_evidence.py --date 2026-05-22 --store-id LOJA-01 --group-code default

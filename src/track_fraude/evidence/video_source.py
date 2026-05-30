@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from track_fraude.models.sync import SyncMap
+from track_fraude.storage import RawScope, raw_root
 from track_fraude_core.db.evidence_ffmpeg import EvidenceEncodeSettings
 
 
@@ -85,10 +86,16 @@ def resolve_video_segments(
     project_root: Path,
     date: str,
     camera_id: str,
+    store_id: str,
+    group_code: str | None,
     sync_map: SyncMap | None,
     processed_manifest_path: Path | None,
 ) -> list[VideoSegment]:
-    raw_day_dir = project_root / "data" / "raw" / "video" / date
+    scope = RawScope.from_config(
+        raw_root(project_root),
+        {"group_code": group_code, "store_id": store_id},
+    )
+    raw_day_dir = scope.date_dir(date)
     manifest = load_raw_day_manifest(raw_day_dir)
     if manifest:
         cameras = manifest.get("cameras")
@@ -124,9 +131,10 @@ def resolve_video_segments(
                 t_start = sync_map.anchor.t_abs
 
     if video_path is None or not video_path.is_file():
+        rel_hint = raw_day_dir.as_posix()
         raise FileNotFoundError(
             f"Vídeo não encontrado para {camera_id} em {date}. "
-            f"Verifique data/raw/video/{date}/ ou manifest.json."
+            f"Verifique {rel_hint}/ ou manifest.json."
         )
 
     if t_start is None:

@@ -56,7 +56,12 @@ def main() -> None:
     vid_stride = max(1, int(track_settings.get("vid_stride", 5)))
 
     video_path = resolve_video_path(
-        ROOT, date=args.date, camera_id=args.camera, video=args.video
+        ROOT,
+        date=args.date,
+        camera_id=args.camera,
+        store_id=config["store_id"],
+        group_code=config.get("group_code"),
+        video=args.video,
     )
     if not video_path.exists():
         raise FileNotFoundError(

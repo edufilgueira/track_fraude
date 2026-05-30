@@ -99,6 +99,26 @@ class PipelineRunRepository:
             )
             conn.commit()
 
+    def cancel_run(self, run_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE pipeline_runs
+                SET status = 'cancelled',
+                    finished_at = datetime('now'),
+                    updated_at = datetime('now')
+                WHERE id = ? AND status = 'running'
+                """,
+                (run_id,),
+            )
+            conn.commit()
+
+    def get_running_for_store(self, store_db_id: int) -> PipelineRunRecord | None:
+        for run in self.list_running():
+            if run.store_db_id == store_db_id:
+                return run
+        return None
+
     def _row_to_record(self, row) -> PipelineRunRecord:
         keys = set(row.keys())
         return PipelineRunRecord(

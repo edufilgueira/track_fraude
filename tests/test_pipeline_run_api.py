@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from server.app import create_app
+from server.services.video_storage import format_date_br, list_raw_import_dates
+from track_fraude_core.db import GroupRepository, StoreRepository
+
+
+@pytest.fixture(autouse=True)
+def isolated_editor_frames(monkeypatch, tmp_path: Path):
+    frames_root = tmp_path / "editor_frames"
+    monkeypatch.setattr(
+        "server.services.editor_frame_storage.EDITOR_FRAMES_ROOT", frames_root
+    )
+    monkeypatch.setattr(
+        "server.services.editor_frame_storage.LEGACY_DATA_FRAMES_ROOT",
+        tmp_path / "legacy_editor_frames",
+    )
+
+
+@pytest.fixture
+def project_root(tmp_path: Path) -> Path:
+    return tmp_path
+
+
+@pytest.fixture
+def db_path(tmp_path: Path) -> Path:
+    return tmp_path / "test.db"
+
+
+@pytest.fixture
+def settings_path(db_path: Path, tmp_path: Path) -> Path:
+    path = tmp_path / "settings.yaml"
+    path.write_text(
+        f"""
+app:
+  secret_key: test-secret
+database:
+  path: {db_path.as_posix()}
+auth:
+  admin_username: admin
+  admin_password: admin123
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def client(settings_path: Path, project_root: Path, monkeypatch) -> TestClient:
+    monkeypatch.setattr("server.dependencies.PROJECT_ROOT", project_root)
+    monkeypatch.setattr("server.services.video_storage.PROJECT_ROOT", project_root)
+    return TestClient(create_app(settings_path))
+
+
+def login(client: TestClient) -> None:
+    response = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin123"},
+        follow_redirects=False,
+    )
+    assert response.status_code in (302, 303)
+
+
+def test_list_raw_import_dates_empty(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("server.services.video_storage.PROJECT_ROOT", tmp_path)
+    assert list_raw_import_dates(group_code="default", store_id="LOJA-01") == []
+
+
+def test_format_date_br():
+    assert format_date_br("2026-05-23") == "23/05/2026"
+
+
+def test_raw_dates_api(
+    client: TestClient,
+    project_root: Path,
+    db_path: Path,
+):
+    group_repo = GroupRepository(db_path)
+    group = group_repo.list_groups()[0]
+    store_repo = StoreRepository(db_path)
+    store = store_repo.create_store(
+        group_db_id=group.id,
+        store_id="LOJA-01",
+        name="Loja Teste",
+    )
+    raw_dir = project_root / "data" / "raw" / "default" / "LOJA-01" / "2026-05-22"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "cam1.mp4").write_bytes(b"x")
+
+    login(client)
+    response = client.get(f"/api/pipeline/stores/{store.id}/raw-dates")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dates"] == [{"id": "2026-05-22", "label": "22/05/2026"}]

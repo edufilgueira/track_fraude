@@ -303,6 +303,15 @@
     loadImageFromUrl(savedFrameUrl(), "Frame salvo no servidor", true);
   }
 
+  function rawVideoLabel(date) {
+    const group = config.groupCode || "default";
+    const store = config.storeCode || "";
+    return (
+      "data/raw/" + group + "/" + store + "/" + date + "/" + config.cameraCode + ".mp4 → " +
+      savedFrameLabel()
+    );
+  }
+
   async function loadFrameFromStorage() {
     if (captureInProgress) return;
     const date = (videoDateInput && videoDateInput.value || "").trim();
@@ -312,8 +321,7 @@
     }
 
     const seconds = clampSeekSeconds(seekInput.value);
-    const label =
-      "data/raw/video/" + date + "/" + config.cameraCode + ".mp4 → " + savedFrameLabel();
+    const label = rawVideoLabel(date);
     setStatus("Extraindo frame e salvando no servidor…", "pending");
     currentFile = null;
     captureInProgress = true;
@@ -390,7 +398,7 @@
     } catch (error) {
       const message =
         error && error.message === "Failed to fetch"
-          ? "Falha de rede ou upload interrompido. Vídeos grandes podem demorar — aguarde ou use o MP4 já em data/raw/video/."
+          ? "Falha de rede ou upload interrompido. Vídeos grandes podem demorar — aguarde ou use o MP4 já em data/raw/."
           : error.message;
       setStatus("Erro ao extrair frame: " + message, "error");
     } finally {

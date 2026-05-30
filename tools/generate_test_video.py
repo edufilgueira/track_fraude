@@ -113,20 +113,23 @@ def main() -> None:
     parser.add_argument(
         "--output",
         default=None,
-        help="Caminho do mp4 (default: data/raw/video/{date}/{camera}.mp4)",
+        help="Caminho do mp4 (default: data/raw/{group}/{store}/{date}/{camera}.mp4)",
     )
     args = parser.parse_args()
 
     config = load_job_store_config(args)
     validate_camera_in_config(config, args.camera)
 
+    group_code = str(config.get("group_code") or "default").strip() or "default"
+    store_id = str(config["store_id"]).strip()
     output = (
         Path(args.output)
         if args.output
         else ROOT
         / "data"
         / "raw"
-        / "video"
+        / group_code
+        / store_id
         / args.date
         / f"{args.camera}.mp4"
     )

@@ -8,11 +8,14 @@ dist/
 build/
 
 # Vídeos gerados localmente (mantém estrutura via .gitkeep)
-data/raw/video/**/*.mp4
-data/raw/video/**/*_meta.json
+data/raw/**/*.mp4
+data/raw/**/*_meta.json
+!data/raw/**/.gitkeep
 
 # Artefatos processados (sync, tracks, pipeline_state)
 data/processed/**/*
+data/logs/
+!data/logs/.gitkeep
 !data/processed/.gitkeep
 
 # Entregáveis finais (alertas, clips)

@@ -90,6 +90,8 @@ def build_evidence_pack(
                 project_root=project_root,
                 date=date,
                 camera_id=camera_id,
+                store_id=str(config["store_id"]),
+                group_code=config.get("group_code"),
                 sync_map=sync_map,
                 processed_manifest_path=processed.manifest_path(date, camera_id),
             )
@@ -111,6 +113,8 @@ def build_evidence_pack(
                 project_root=project_root,
                 date=date,
                 camera_id=checkout_camera,
+                store_id=str(config["store_id"]),
+                group_code=config.get("group_code"),
                 sync_map=sync_map,
                 processed_manifest_path=processed.manifest_path(date, checkout_camera),
             )

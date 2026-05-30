@@ -42,6 +42,21 @@
           {% endif %}
         </td>
         <td class="actions">
+          <span class="pipeline-run-wrap">
+            <button type="button"
+                    class="btn btn-icon pipeline-run-btn"
+                    data-store-id="{{ store.id }}"
+                    data-running="{{ '1' if store.id in processing_stores else '0' }}"
+                    title="{% if store.id in processing_stores %}Cancelar pipeline{% else %}Executar pipeline{% endif %}"
+                    aria-label="{% if store.id in processing_stores %}Cancelar pipeline{% else %}Executar pipeline{% endif %}"
+                    {% if not store.active %}disabled{% endif %}>
+              {% if store.id in processing_stores %}
+              <svg class="pipeline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              {% else %}
+              <svg class="pipeline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+              {% endif %}
+            </button>
+          </span>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}">Configurar</a>
           <a class="btn btn-secondary" href="/stores/{{ store.id }}/rules">Regras</a>
           {% if store_has_review.get(store.id) %}
@@ -64,4 +79,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/pipeline_status.js"></script>
+<script src="/static/pipeline_run.js"></script>
 {% endblock %}

@@ -23,6 +23,7 @@ class ServerSettings:
     admin_username: str
     admin_password: str
     admin_display_name: str
+    pipeline_python: Path | None = None
 
 
 def load_settings(path: Path | str | None = None) -> ServerSettings:
@@ -38,6 +39,14 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
     if not db_path.is_absolute():
         db_path = (PROJECT_ROOT / db_path).resolve()
 
+    pipeline_cfg = raw.get("pipeline", {})
+    pipeline_python_raw = pipeline_cfg.get("python")
+    pipeline_python: Path | None = None
+    if pipeline_python_raw:
+        pipeline_python = Path(str(pipeline_python_raw))
+        if not pipeline_python.is_absolute():
+            pipeline_python = (PROJECT_ROOT / pipeline_python).resolve()
+
     return ServerSettings(
         app_name=str(app_cfg.get("name", "track_fraude")),
         host=str(app_cfg.get("host", "127.0.0.1")),
@@ -47,4 +56,5 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
         admin_username=str(auth_cfg.get("admin_username", "admin")),
         admin_password=str(auth_cfg.get("admin_password", "admin123")),
         admin_display_name=str(auth_cfg.get("admin_display_name", "Administrador")),
+        pipeline_python=pipeline_python,
     )

@@ -70,6 +70,8 @@ def main() -> None:
         ROOT,
         date=args.date,
         camera_id=entrance_camera,
+        store_id=config["store_id"],
+        group_code=config.get("group_code"),
         video=args.video,
     )
     use_yolo = not args.skip_yolo and sync_map is not None

@@ -18,7 +18,7 @@ Interface para **cadastro e configuração** — roda separado da máquina de pr
 ## Dependências
 
 Este pacote é **independente**: FastAPI, Jinja2, Uvicorn + `track-fraude-core` (SQLite).  
-O editor de ROI/zona salva o **frame capturado no servidor** em `server/upload/editor_frames/{loja}/{camera_db_id}/frame.jpg` (ex.: `1/1/frame.jpg`), acessível de qualquer dispositivo. Toda a pasta `server/upload/` pode ser copiada junto com o painel para outro servidor. Frames antigos em `data/editor_frames/` (legado) são migrados automaticamente para `server/upload/` na subida do app. O MP4 em `data/raw/video/` **não é removido** — continua disponível para o pipeline de processamento.
+O editor de ROI/zona salva o **frame capturado no servidor** em `server/upload/editor_frames/{loja}/{camera_db_id}/frame.jpg` (ex.: `1/1/frame.jpg`), acessível de qualquer dispositivo. Toda a pasta `server/upload/` pode ser copiada junto com o painel para outro servidor. Frames antigos em `data/editor_frames/` (legado) são migrados automaticamente para `server/upload/` na subida do app. O MP4 em `data/raw/{group}/{store}/{date}/` **não é removido** — continua disponível para o pipeline de processamento.
 
 ## Configuração
 
@@ -36,6 +36,12 @@ Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `serv
 ## Executar
 
 ```powershell
+# 1) Worker (raiz do repo) — pipeline de vídeo
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[track]"
+
+# 2) Painel web
 cd server
 python -m venv .venv
 .venv\Scripts\activate
@@ -43,6 +49,8 @@ pip install -r requirements.txt
 python scripts/init_db.py
 python main.py
 ```
+
+O botão **Play** na listagem de lojas usa o Python do worker (`.venv` na raiz ou `pipeline.python` em `config/settings.yaml`), não o venv mínimo do painel.
 
 Acesse: http://127.0.0.1:8080/login
 

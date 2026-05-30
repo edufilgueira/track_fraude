@@ -5,6 +5,7 @@ from pathlib import Path
 
 DEFAULT_PROCESSED_DIR = Path("data/processed")
 DEFAULT_OUTPUT_DIR = Path("data/output")
+DEFAULT_RAW_DIR = Path("data/raw")
 
 
 def processed_root(project_root: Path | str) -> Path:
@@ -15,6 +16,11 @@ def processed_root(project_root: Path | str) -> Path:
 def output_root(project_root: Path | str) -> Path:
     """Raiz dos entregáveis finais (alertas, clips, índices para revisão)."""
     return Path(project_root) / DEFAULT_OUTPUT_DIR
+
+
+def raw_root(project_root: Path | str) -> Path:
+    """Raiz dos vídeos brutos (antes do processamento)."""
+    return Path(project_root) / DEFAULT_RAW_DIR
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,11 @@ class ProcessedScope(StoreScope):
 
     def review_index_path(self, date: str) -> Path:
         return self.review_dir(date) / "index.json"
+
+
+@dataclass(frozen=True)
+class RawScope(StoreScope):
+    """Vídeos brutos em data/raw/{group}/{store}/{date}/."""
 
 
 @dataclass(frozen=True)

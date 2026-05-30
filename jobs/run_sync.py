@@ -41,7 +41,12 @@ def main() -> None:
     camera_ids = camera_ids_from_config(config)
     scope = ProcessedScope.from_config(processed_root(ROOT), config)
     video_path = resolve_video_path(
-        ROOT, date=args.date, camera_id=args.camera, video=args.video
+        ROOT,
+        date=args.date,
+        camera_id=args.camera,
+        store_id=config["store_id"],
+        group_code=config.get("group_code"),
+        video=args.video,
     )
 
     if not video_path.exists():
