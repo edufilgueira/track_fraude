@@ -279,6 +279,13 @@ Se o acesso não funcionar:
 ---
 
 ## 9. Subir o painel
+Matar o processo se precisar
+```bash
+pkill -f "server/main.py"
+# ou
+sudo lsof -i :8080
+kill -9 PID
+```
 
 ```bash
 cd ~/track_fraude/server
@@ -348,6 +355,7 @@ python jobs/run_daily_pipeline.py \
 | Log do Play: `python: /usr/bin/python3` | `pipeline.python` vazio, worker ausente, ou bug antigo que resolvia symlink do venv | Passo 6 — caminho absoluto do `.venv`; atualize o código e reinicie o painel |
 | `ModuleNotFoundError: pyarrow` | Worker não instalado no Python certo | Passos 3–4; se o `pip install` falhar, use Python 3.12/3.11 |
 | Console trava / `unable to open database file` durante Play | Concorrência SQLite entre painel e pipeline | Atualize o código; reinicie o painel; confira `ls -la data/track_fraude.db*` e `df -h .` |
+| `Too many open files` / falha ao cancelar | Vazamento de handle do log da pipeline | Atualize o código; reinicie o painel; no servidor: `ulimit -n` (ideal ≥ 4096) |
 | Play: "Nenhuma data importada" | Sem vídeos em `data/raw/...` | Copiar MP4s |
 | Sync falha | Tesseract ausente | `sudo apt install tesseract-ocr` |
 | Evidence falha | FFmpeg ausente | `sudo apt install ffmpeg` |

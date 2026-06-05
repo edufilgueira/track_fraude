@@ -15,6 +15,22 @@ from server.services.worker_python import resolve_worker_python
 _lock = threading.Lock()
 _running: dict[int, subprocess.Popen] = {}
 _log_files: dict[int, Path] = {}
+_log_handles: dict[int, object] = {}
+
+
+def _close_log_handle(store_db_id: int) -> None:
+    with _lock:
+        handle = _log_handles.pop(store_db_id, None)
+    if handle is None:
+        return
+    try:
+        handle.flush()
+    except OSError:
+        pass
+    try:
+        handle.close()
+    except OSError:
+        pass
 
 
 def _log_path(project_root: Path, store_db_id: int, date: str) -> Path:
@@ -46,6 +62,7 @@ def _terminate_process(proc: subprocess.Popen) -> None:
 
 def _watch_process(store_db_id: int, proc: subprocess.Popen, run_id: int) -> None:
     proc.wait()
+    _close_log_handle(store_db_id)
     with _lock:
         _running.pop(store_db_id, None)
     try:
@@ -102,15 +119,29 @@ def read_pipeline_log(
         }
 
     safe_offset = max(0, offset)
-    with path.open("rb") as handle:
-        handle.seek(safe_offset)
-        chunk = handle.read(128 * 1024)
-        new_offset = safe_offset + len(chunk)
-
     try:
         log_path_display = path.relative_to(project_root).as_posix()
     except ValueError:
         log_path_display = path.as_posix()
+
+    try:
+        with path.open("rb") as handle:
+            handle.seek(safe_offset)
+            chunk = handle.read(128 * 1024)
+            new_offset = safe_offset + len(chunk)
+    except OSError as exc:
+        return {
+            "content": "",
+            "offset": safe_offset,
+            "running": running,
+            "has_log": True,
+            "log_path": log_path_display,
+            "error": (
+                "too_many_open_files"
+                if getattr(exc, "errno", None) == 24
+                else str(exc)
+            ),
+        }
 
     return {
         "content": chunk.decode("utf-8", errors="replace"),
@@ -175,6 +206,8 @@ def start_daily_pipeline(
         str(run_id),
     ]
 
+    _close_log_handle(store_db_id)
+
     log_file_path = _log_path(project_root, store_db_id, date)
     log_file_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_file_path.open("a", encoding="utf-8")
@@ -206,6 +239,7 @@ def start_daily_pipeline(
     with _lock:
         _running[store_db_id] = proc
         _log_files[store_db_id] = log_file_path
+        _log_handles[store_db_id] = log_handle
 
     watcher = threading.Thread(
         target=_watch_process,
@@ -217,8 +251,6 @@ def start_daily_pipeline(
 
 
 def cancel_daily_pipeline(*, store_db_id: int) -> bool:
-    repo = get_pipeline_run_repo()
-    run = repo.get_running_for_store(store_db_id)
     cancelled = False
 
     with _lock:
@@ -228,17 +260,28 @@ def cancel_daily_pipeline(*, store_db_id: int) -> bool:
             _running.pop(store_db_id, None)
             cancelled = True
 
-    if run is not None:
-        repo.cancel_run(run.id)
-        cancelled = True
+    if cancelled:
+        with _lock:
+            handle = _log_handles.get(store_db_id)
+        if handle is not None:
+            try:
+                handle.write(
+                    f"\n--- cancelado pelo usuário {datetime.now().isoformat()} ---\n"
+                )
+                handle.flush()
+            except OSError:
+                pass
+        _close_log_handle(store_db_id)
 
-    with _lock:
-        log_path = _log_files.get(store_db_id)
-    if log_path is not None and log_path.is_file():
-        with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(
-                f"\n--- cancelado pelo usuário {datetime.now().isoformat()} ---\n"
-            )
+    try:
+        repo = get_pipeline_run_repo()
+        run = repo.get_running_for_store(store_db_id)
+        if run is not None:
+            repo.cancel_run(run.id)
+            cancelled = True
+    except sqlite3.OperationalError:
+        if cancelled:
+            return True
 
     return cancelled
 

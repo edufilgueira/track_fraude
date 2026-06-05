@@ -9,6 +9,7 @@ from server.dependencies import get_group_repo, get_project_root, get_pipeline_r
 from server.services.review_loader import has_review_evidence
 from server.services.pipeline_runner import (
     cancel_daily_pipeline,
+    is_store_running_locally,
     raw_dates_payload,
     read_pipeline_log,
     start_daily_pipeline,
@@ -140,10 +141,17 @@ async def store_pipeline_log(
 
 @router.post("/stores/{store_db_id}/cancel")
 async def cancel_store_pipeline(store_db_id: int) -> dict:
-    store_repo = get_store_repo()
-    store = store_repo.get_store(store_db_id)
-    if not store:
-        raise HTTPException(status_code=404, detail="Loja não encontrada")
+    try:
+        store_repo = get_store_repo()
+        store = store_repo.get_store(store_db_id)
+        if not store:
+            raise HTTPException(status_code=404, detail="Loja não encontrada")
+    except sqlite3.OperationalError:
+        if not is_store_running_locally(store_db_id):
+            raise HTTPException(
+                status_code=503,
+                detail="Banco temporariamente indisponível",
+            ) from None
 
     cancelled = cancel_daily_pipeline(store_db_id=store_db_id)
     if not cancelled:
