@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,15 +26,21 @@ class PipelineRunRecord:
 
 class PipelineRunRepository:
     STALE_AFTER = timedelta(hours=4)
+    CLEANUP_INTERVAL_SEC = 60.0
 
     def __init__(self, db_path: Path | str | None = None) -> None:
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._last_cleanup_at = 0.0
         init_database(self.db_path)
 
     def _conn(self):
         return get_connection(self.db_path)
 
     def cleanup_stale_runs(self) -> int:
+        now = time.monotonic()
+        if now - self._last_cleanup_at < self.CLEANUP_INTERVAL_SEC:
+            return 0
+        self._last_cleanup_at = now
         cutoff = (datetime.now(timezone.utc) - self.STALE_AFTER).strftime(
             "%Y-%m-%d %H:%M:%S"
         )

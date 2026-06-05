@@ -100,6 +100,28 @@ def test_raw_dates_api(
     assert payload["dates"] == [{"id": "2026-05-22", "label": "22/05/2026"}]
 
 
+def test_pipeline_status_degraded_on_sqlite_error(client: TestClient, monkeypatch):
+    class BrokenRepo:
+        def list_running(self):
+            raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(
+        "server.routes.pipeline_api.get_pipeline_run_repo",
+        lambda: BrokenRepo(),
+    )
+    monkeypatch.setattr(
+        "server.routes.pipeline_api.list_running_store_ids_locally",
+        lambda: [7],
+    )
+
+    login(client)
+    response = client.get("/api/pipeline/status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stores_processing"] == [7]
+    assert payload.get("degraded") is True
+
+
 def test_pipeline_log_api_survives_sqlite_error(
     client: TestClient,
     project_root: Path,

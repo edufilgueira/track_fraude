@@ -15,8 +15,6 @@ auth:
 
 # Python do worker (track-fraude + pyarrow + ultralytics).
 # Deixe vazio para detectar automaticamente (.venv na raiz ou python do sistema).
-pipeline:
-  python: /home/eduardo/track_fraude/data/track_fraude.db
 
-# pipeline:
-#   python:
+pipeline:
+  python:

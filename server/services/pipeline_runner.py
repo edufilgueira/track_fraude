@@ -163,6 +163,17 @@ def is_store_running_locally(store_db_id: int) -> bool:
         return True
 
 
+def list_running_store_ids_locally() -> list[int]:
+    with _lock:
+        active: list[int] = []
+        for store_db_id, proc in list(_running.items()):
+            if proc.poll() is None:
+                active.append(store_db_id)
+            else:
+                _running.pop(store_db_id, None)
+        return sorted(active)
+
+
 def start_daily_pipeline(
     *,
     project_root: Path,

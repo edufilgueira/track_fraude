@@ -10,6 +10,7 @@ from server.services.review_loader import has_review_evidence
 from server.services.pipeline_runner import (
     cancel_daily_pipeline,
     is_store_running_locally,
+    list_running_store_ids_locally,
     raw_dates_payload,
     read_pipeline_log,
     start_daily_pipeline,
@@ -19,10 +20,7 @@ from server.services.video_storage import raw_store_dir
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline-api"])
 
 
-@router.get("/status")
-async def pipeline_status() -> dict:
-    repo = get_pipeline_run_repo()
-    runs = repo.list_running()
+def _pipeline_status_payload(runs) -> dict:
     return {
         "running": [
             {
@@ -42,6 +40,38 @@ async def pipeline_status() -> dict:
         ),
         "stores_processing": sorted({run.store_db_id for run in runs}),
     }
+
+
+def _degraded_pipeline_status_payload() -> dict:
+    store_ids = list_running_store_ids_locally()
+    return {
+        "running": [
+            {
+                "run_id": None,
+                "store_db_id": store_db_id,
+                "group_db_id": None,
+                "group_code": None,
+                "store_id": None,
+                "date": None,
+                "current_phase": None,
+                "current_camera": None,
+            }
+            for store_db_id in store_ids
+        ],
+        "groups_processing": [],
+        "stores_processing": store_ids,
+        "degraded": True,
+    }
+
+
+@router.get("/status")
+async def pipeline_status() -> dict:
+    try:
+        repo = get_pipeline_run_repo()
+        runs = repo.list_running()
+        return _pipeline_status_payload(runs)
+    except sqlite3.OperationalError:
+        return _degraded_pipeline_status_payload()
 
 
 class RunPipelineBody(BaseModel):
