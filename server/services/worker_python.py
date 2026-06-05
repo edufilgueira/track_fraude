@@ -55,7 +55,9 @@ def resolve_worker_python(
             continue
         seen.add(key)
         if _validate_worker_python(candidate, project_root=root):
-            return candidate.resolve()
+            # Não usar resolve(): em Linux o python do venv costuma ser symlink
+            # para o interpretador do sistema; resolver quebra o pyvenv.cfg.
+            return candidate
 
     raise RuntimeError(
         "Python do worker não encontrado (falta pyarrow/track_fraude). "
