@@ -23,9 +23,9 @@ data/output/**/*
 !data/output/.gitkeep
 
 # Banco SQLite local
-data/track_fraude.db
-data/track_fraude.db-shm
-data/track_fraude.db-wal
+# data/track_fraude.db
+# data/track_fraude.db-shm
+# data/track_fraude.db-wal
 *.mp4 
 data/video*
 
