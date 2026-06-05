@@ -36,7 +36,11 @@ def main() -> None:
     port = args.port or settings.port
 
     app = create_app(args.settings)
-    print(f"Painel web: http://{host}:{port}/login")
+    print(f"Painel web (local): http://127.0.0.1:{port}/login")
+    if host in {"0.0.0.0", "::"}:
+        print(f"Painel web (rede):  http://<IP-do-servidor>:{port}/login")
+    else:
+        print(f"Painel web: http://{host}:{port}/login")
     print(f"SQLite: {settings.database_path}")
     print(f"Usuário padrão: {settings.admin_username}")
     uvicorn.run(app, host=host, port=port, reload=args.reload)

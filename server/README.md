@@ -30,11 +30,11 @@ Edite `config/settings.yaml`:
 | `database.path` | SQLite compartilhado com o worker (local, absoluto ou rede) |
 | `auth.admin_*` | Usuário inicial (criado no primeiro start se DB vazio) |
 | `app.secret_key` | Troque em produção |
-| `app.host` / `app.port` | Bind do Uvicorn |
+| `app.host` / `app.port` | Bind do Uvicorn (`0.0.0.0` = aceita conexões da rede; `127.0.0.1` = só nesta máquina) |
 
 Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `server/` (incluindo `server/upload/editor_frames/`) + `core/`, ajuste `database.path` para o SQLite acessível na rede e execute normalmente.
 
-## Executar
+## Executar Windows
 
 ```powershell
 # 1) Worker (raiz do repo) — pipeline de vídeo
@@ -48,12 +48,48 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python scripts/init_db.py
-python server/main.py
+python main.py
+```
+
+
+## Executar Linux
+
+```bash
+# 1) Worker (raiz do repo) — pipeline de vídeo
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[track]"
+
+# 2) Painel web
+cd server
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/init_db.py
+python main.py
 ```
 
 O botão **Play** na listagem de lojas usa o Python do worker (`.venv` na raiz ou `pipeline.python` em `config/settings.yaml`), não o venv mínimo do painel.
 
-Acesse: http://127.0.0.1:8080/login
+Acesse na própria máquina: http://127.0.0.1:8080/login  
+Acesse de outro PC na rede: http://192.168.0.192:8080/login (troque pelo IP do servidor)
+
+### Acesso na rede local
+
+O `settings.yaml` padrão usa `app.host: 0.0.0.0` para escutar em todas as interfaces.  
+Alternativa sem editar o arquivo:
+
+```bash
+python main.py --host 0.0.0.0 --port 8080
+```
+
+No Ubuntu, libere a porta no firewall se necessário:
+
+```bash
+sudo ufw allow 8080/tcp
+```
+
+Use só `127.0.0.1` se o painel não precisar ser acessado fora do servidor.
 
 ## Testes (a partir da raiz do repo)
 
