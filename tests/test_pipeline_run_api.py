@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -97,6 +98,44 @@ def test_raw_dates_api(
     assert response.status_code == 200
     payload = response.json()
     assert payload["dates"] == [{"id": "2026-05-22", "label": "22/05/2026"}]
+
+
+def test_pipeline_log_api_survives_sqlite_error(
+    client: TestClient,
+    project_root: Path,
+    db_path: Path,
+    monkeypatch,
+):
+    group_repo = GroupRepository(db_path)
+    group = group_repo.list_groups()[0]
+    store_repo = StoreRepository(db_path)
+    store = store_repo.create_store(
+        group_db_id=group.id,
+        store_id="LOJA-SQLITE",
+        name="Loja SQLite",
+    )
+    log_dir = project_root / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"pipeline_{store.id}_2026-05-22_test.log"
+    log_path.write_text("pipeline ok\n", encoding="utf-8")
+
+    from server.services import pipeline_runner
+
+    pipeline_runner._log_files[store.id] = log_path
+
+    class BrokenStoreRepo:
+        def get_store(self, store_db_id: int):
+            raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(
+        "server.routes.pipeline_api.get_store_repo",
+        lambda: BrokenStoreRepo(),
+    )
+
+    login(client)
+    response = client.get(f"/api/pipeline/stores/{store.id}/log?offset=0")
+    assert response.status_code == 200
+    assert "pipeline ok" in response.json()["content"]
 
 
 def test_pipeline_log_api(

@@ -129,11 +129,19 @@ DEFAULT_GROUP_NAME = "Grupo Padrão"
 
 def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
     path = Path(db_path) if db_path else DEFAULT_DB_PATH
+    if not path.is_absolute():
+        path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=10.0)
+    try:
+        conn = sqlite3.connect(str(path), timeout=30.0)
+    except sqlite3.OperationalError as exc:
+        raise sqlite3.OperationalError(
+            f"Não foi possível abrir o SQLite em {path}: {exc}"
+        ) from exc
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 

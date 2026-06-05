@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -47,9 +48,12 @@ def _watch_process(store_db_id: int, proc: subprocess.Popen, run_id: int) -> Non
     proc.wait()
     with _lock:
         _running.pop(store_db_id, None)
-    repo = get_pipeline_run_repo()
-    if repo.get_running_for_store(store_db_id) is not None:
-        repo.finish_run(run_id, ok=False)
+    try:
+        repo = get_pipeline_run_repo()
+        if repo.get_running_for_store(store_db_id) is not None:
+            repo.finish_run(run_id, ok=proc.returncode == 0)
+    except sqlite3.OperationalError:
+        pass
 
 
 def _find_latest_log(project_root: Path, store_db_id: int) -> Path | None:
@@ -72,14 +76,22 @@ def resolve_log_path(project_root: Path, store_db_id: int) -> Path | None:
     return _find_latest_log(project_root, store_db_id)
 
 
+def _is_store_running(store_db_id: int) -> bool:
+    if is_store_running_locally(store_db_id):
+        return True
+    try:
+        return get_pipeline_run_repo().is_store_running(store_db_id)
+    except sqlite3.OperationalError:
+        return is_store_running_locally(store_db_id)
+
+
 def read_pipeline_log(
     *,
     project_root: Path,
     store_db_id: int,
     offset: int = 0,
 ) -> dict:
-    repo = get_pipeline_run_repo()
-    running = repo.is_store_running(store_db_id) or is_store_running_locally(store_db_id)
+    running = _is_store_running(store_db_id)
     path = resolve_log_path(project_root, store_db_id)
     if path is None:
         return {

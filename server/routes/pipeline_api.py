@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -107,21 +109,32 @@ async def store_pipeline_log(
     store_db_id: int,
     offset: int = 0,
 ) -> dict:
-    store_repo = get_store_repo()
-    store = store_repo.get_store(store_db_id)
-    if not store:
-        raise HTTPException(status_code=404, detail="Loja não encontrada")
-
     project_root = get_project_root()
     payload = read_pipeline_log(
         project_root=project_root,
         store_db_id=store_db_id,
         offset=max(0, offset),
     )
-    run = get_pipeline_run_repo().get_running_for_store(store_db_id)
-    if run is not None:
-        payload["current_phase"] = run.current_phase
-        payload["date"] = run.date
+
+    try:
+        store_repo = get_store_repo()
+        store = store_repo.get_store(store_db_id)
+        if not store:
+            raise HTTPException(status_code=404, detail="Loja não encontrada")
+
+        run = get_pipeline_run_repo().get_running_for_store(store_db_id)
+        if run is not None:
+            payload["current_phase"] = run.current_phase
+            payload["date"] = run.date
+    except sqlite3.OperationalError:
+        # Durante o pipeline o worker também usa o SQLite; o log em arquivo
+        # deve continuar fluindo mesmo se o metadado do banco falhar momentaneamente.
+        if not payload.get("has_log") and not payload.get("running"):
+            raise HTTPException(
+                status_code=503,
+                detail="Banco temporariamente indisponível",
+            ) from None
+
     return payload
 
 

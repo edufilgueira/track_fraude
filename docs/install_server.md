@@ -347,6 +347,7 @@ python jobs/run_daily_pipeline.py \
 | Play: "Python do worker não encontrado" | Falta `.venv` na raiz ou sem pyarrow | Passos 3 e 4 |
 | Log do Play: `python: /usr/bin/python3` | `pipeline.python` vazio, worker ausente, ou bug antigo que resolvia symlink do venv | Passo 6 — caminho absoluto do `.venv`; atualize o código e reinicie o painel |
 | `ModuleNotFoundError: pyarrow` | Worker não instalado no Python certo | Passos 3–4; se o `pip install` falhar, use Python 3.12/3.11 |
+| Console trava / `unable to open database file` durante Play | Concorrência SQLite entre painel e pipeline | Atualize o código; reinicie o painel; confira `ls -la data/track_fraude.db*` e `df -h .` |
 | Play: "Nenhuma data importada" | Sem vídeos em `data/raw/...` | Copiar MP4s |
 | Sync falha | Tesseract ausente | `sudo apt install tesseract-ocr` |
 | Evidence falha | FFmpeg ausente | `sudo apt install ffmpeg` |
