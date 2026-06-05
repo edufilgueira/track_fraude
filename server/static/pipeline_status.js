@@ -1,5 +1,10 @@
 (function () {
-  const POLL_MS = 2000;
+  const POLL_MS_ACTIVE = 2000;
+  const POLL_MS_IDLE = 5000;
+  const POLL_MS_HIDDEN = 15000;
+
+  let pollTimer = null;
+  let lastHadRunning = false;
 
   function escapeHtml(text) {
     const div = document.createElement("div");
@@ -22,15 +27,37 @@
     return '<span class="badge badge-active">' + escapeHtml(label) + "</span>";
   }
 
+  function scheduleNextPoll(hasRunning) {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+    }
+    let delay = hasRunning ? POLL_MS_ACTIVE : POLL_MS_IDLE;
+    if (document.hidden) {
+      delay = Math.max(delay, POLL_MS_HIDDEN);
+    }
+    pollTimer = setTimeout(refresh, delay);
+  }
+
   async function refresh() {
+    pollTimer = null;
+    if (!document.querySelector(".status-cell")) {
+      return null;
+    }
+
     try {
-      const response = await fetch("/api/pipeline/status");
+      const response = await fetch("/api/pipeline/status", {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!response.ok) {
+        scheduleNextPoll(lastHadRunning);
         return null;
       }
       const data = await response.json();
       const groups = new Set(data.groups_processing || []);
       const stores = new Set(data.stores_processing || []);
+      const hasRunning = stores.size > 0 || groups.size > 0;
+      lastHadRunning = hasRunning;
+
       const runByStore = {};
       const runByGroup = {};
       (data.running || []).forEach(function (run) {
@@ -74,17 +101,33 @@
           },
         })
       );
+
+      scheduleNextPoll(hasRunning);
       return data;
     } catch (error) {
-      console.debug("pipeline status poll failed", error);
+      if (error.name !== "TimeoutError" && error.name !== "AbortError") {
+        console.debug("pipeline status poll failed", error);
+      }
+      scheduleNextPoll(lastHadRunning);
       return null;
     }
   }
 
-  window.refreshPipelineStatus = refresh;
+  window.refreshPipelineStatus = function () {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+    return refresh();
+  };
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      window.refreshPipelineStatus();
+    }
+  });
 
   if (document.querySelector(".status-cell")) {
     refresh();
-    setInterval(refresh, POLL_MS);
   }
 })();

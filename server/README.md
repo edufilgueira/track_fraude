@@ -9,7 +9,7 @@ Interface para **cadastro e configuração** — roda separado da máquina de pr
 - Configuração de câmeras e OCR ROI
 - **Revisão de alertas** (Fase 8): fila, clips cam1/cam2, confirmar/falso positivo
 - Indicador de **pipeline em execução** nas listagens de grupo/loja
-- **Console ao vivo** abaixo da loja durante o processamento (espelho do log do pipeline)
+- **Console ao vivo** abaixo da loja durante o processamento (espelho do log do pipeline). O log é truncado (~120k caracteres) e o polling desacelera com a aba em segundo plano, para evitar travar a interface do browser.
 
 ## Não faz
 
@@ -48,7 +48,7 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python scripts/init_db.py
-python main.py
+python server/main.py
 ```
 
 O botão **Play** na listagem de lojas usa o Python do worker (`.venv` na raiz ou `pipeline.python` em `config/settings.yaml`), não o venv mínimo do painel.
