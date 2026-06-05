@@ -35,8 +35,7 @@ Edite `config/settings.yaml`:
 Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `server/` (incluindo `server/upload/editor_frames/`) + `core/`, ajuste `database.path` para o SQLite acessível na rede e execute normalmente.
 
 ## Executar Windows
-
-```powershell
+```bash
 # 1) Worker (raiz do repo) — pipeline de vídeo
 python -m venv .venv
 .venv\Scripts\activate
