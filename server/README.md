@@ -35,20 +35,37 @@ Edite `config/settings.yaml`:
 Para rodar o painel em **outro servidor** com o mesmo banco, copie a pasta `server/` (incluindo `server/upload/editor_frames/`) + `core/`, ajuste `database.path` para o SQLite acessível na rede e execute normalmente.
 
 ## Executar Windows
-```bash
+
+Abra **PowerShell** na raiz do repo (`track_fraude/`). Se o `pip` falhar com `WinError 5 Acesso negado`, algum processo Python ainda está usando o `.venv` — siga o passo 0 antes de continuar.
+
+```powershell
+# 0) Encerrar Python e remover .venv antigos
+cd C:\caminho\para\track_fraude
+Stop-Process -Name python, pythonw -Force -ErrorAction SilentlyContinue
+deactivate 2>$null
+Remove-Item -Recurse -Force .venv, server\.venv -ErrorAction SilentlyContinue
+
 # 1) Worker (raiz do repo) — pipeline de vídeo
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -e ./core
 pip install -e ".[track]"
+
+# Validar worker (obrigatório antes do painel)
+.\.venv\Scripts\python -c "import pyarrow; import track_fraude; print('Worker OK')"
 
 # 2) Painel web
 cd server
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 python scripts/init_db.py
 python main.py
 ```
+
+Se `WinError 5` persistir: feche o Cursor/terminais, rode o PowerShell **como administrador** e repita o passo 0. Em último caso, reinicie o PC e refaça a partir do passo 0.
 
 
 ## Executar Linux

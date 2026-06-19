@@ -1,0 +1,38 @@
+services:
+  registry:
+    image: registry:2
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: track_fraude
+      RABBITMQ_DEFAULT_PASS: track_fraude
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: track_fraude
+      POSTGRES_USER: track_fraude
+      POSTGRES_PASSWORD: track_fraude
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+
+volumes:
+  registry-data:
+  rabbitmq-data:
+  postgres-data:

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: track-fraude-data-nfs
+spec:
+  capacity:
+    storage: 10Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: CHANGE_ME_NAS_IP
+    path: /exports/track_fraude/data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: track-fraude-data
+  namespace: track-fraude
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Ti
+  volumeName: track-fraude-data-nfs

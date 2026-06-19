@@ -17,4 +17,8 @@ auth:
 # Deixe vazio para detectar automaticamente (.venv na raiz ou python do sistema).
 
 pipeline:
+  # local = executa subprocesso nesta máquina; queue = publica demanda no RabbitMQ/KEDA.
+  mode: local
   python:
+  queue_url: amqp://guest:guest@rabbitmq:5672/%2F
+  queue_name: track-fraude-pipelines

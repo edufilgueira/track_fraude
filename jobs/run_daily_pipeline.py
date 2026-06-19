@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import socket
 import sys
 from pathlib import Path
 
@@ -132,11 +134,26 @@ def main() -> None:
             run_id = pipeline_repo.start_run(store_db_id, args.date)
 
     result: PipelineRunResult | None = None
+    error_message: str | None = None
     try:
+        if run_id is not None:
+            pipeline_repo.mark_run_running(
+                run_id,
+                worker_node=os.getenv("NODE_NAME") or socket.gethostname(),
+                worker_id=os.getenv("HOSTNAME"),
+                job_id=os.getenv("JOB_NAME"),
+            )
         result = run_pipeline_steps(run_config, on_step_start=on_step_start)
+    except Exception as exc:
+        error_message = str(exc)
+        raise
     finally:
         if run_id is not None:
-            pipeline_repo.finish_run(run_id, ok=bool(result and result.ok))
+            pipeline_repo.finish_run(
+                run_id,
+                ok=bool(result and result.ok),
+                error_message=error_message,
+            )
 
     assert result is not None
 

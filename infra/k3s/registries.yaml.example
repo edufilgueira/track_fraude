@@ -1,0 +1,9 @@
+mirrors:
+  "CHANGE_ME_REGISTRY:5000":
+    endpoint:
+      - "http://CHANGE_ME_REGISTRY:5000"
+
+configs:
+  "CHANGE_ME_REGISTRY:5000":
+    tls:
+      insecure_skip_verify: true

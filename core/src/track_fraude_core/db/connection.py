@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     status TEXT NOT NULL DEFAULT 'running',
     current_phase TEXT NOT NULL DEFAULT '',
     current_camera TEXT,
+    worker_node TEXT,
+    worker_id TEXT,
+    job_id TEXT,
+    log_path TEXT,
+    error_message TEXT,
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT,
@@ -353,6 +358,11 @@ def _migrate_pipeline_and_review(conn: sqlite3.Connection) -> None:
                 status TEXT NOT NULL DEFAULT 'running',
                 current_phase TEXT NOT NULL DEFAULT '',
                 current_camera TEXT,
+                worker_node TEXT,
+                worker_id TEXT,
+                job_id TEXT,
+                log_path TEXT,
+                error_message TEXT,
                 started_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 finished_at TEXT,
@@ -360,6 +370,19 @@ def _migrate_pipeline_and_review(conn: sqlite3.Connection) -> None:
             );
             """
         )
+    else:
+        pipeline_columns = _column_names(conn, "pipeline_runs")
+        additions = {
+            "worker_node": "TEXT",
+            "worker_id": "TEXT",
+            "job_id": "TEXT",
+            "log_path": "TEXT",
+            "error_message": "TEXT",
+        }
+        for column, ddl in additions.items():
+            if column not in pipeline_columns:
+                conn.execute(f"ALTER TABLE pipeline_runs ADD COLUMN {column} {ddl}")
+                pipeline_columns.add(column)
 
     if not _table_exists(conn, "alert_reviews"):
         conn.executescript(

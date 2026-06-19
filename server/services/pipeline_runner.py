@@ -9,8 +9,10 @@ from datetime import datetime
 from pathlib import Path
 
 from server.dependencies import get_pipeline_run_repo, get_settings
+from server.services.pipeline_queue import PipelineQueuePublisher
 from server.services.video_storage import format_date_br, list_raw_import_dates
 from server.services.worker_python import resolve_worker_python
+from track_fraude_core.pipeline_queue import PipelineQueueMessage
 
 _lock = threading.Lock()
 _running: dict[int, subprocess.Popen] = {}
@@ -193,6 +195,49 @@ def start_daily_pipeline(
         )
 
     settings = get_settings()
+    if settings.pipeline_mode == "queue":
+        if not settings.queue_url:
+            raise RuntimeError("pipeline.queue_url deve ser configurado para pipeline.mode=queue")
+
+        log_file_path = _log_path(project_root, store_db_id, date)
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        run_id = repo.enqueue_run(
+            store_db_id,
+            date,
+            log_path=log_file_path.relative_to(project_root).as_posix(),
+        )
+        message = PipelineQueueMessage(
+            run_id=run_id,
+            store_db_id=store_db_id,
+            group_code=group_code,
+            store_id=store_id,
+            date=date,
+            db_path=str(settings.database_path),
+            log_path=str(log_file_path),
+        )
+
+        try:
+            result = PipelineQueuePublisher(
+                queue_url=settings.queue_url,
+                queue_name=settings.queue_name,
+            ).publish(message)
+        except Exception as exc:
+            repo.cancel_run(run_id)
+            raise RuntimeError(f"Falha ao publicar pipeline na fila: {exc}") from exc
+
+        with log_file_path.open("a", encoding="utf-8") as log_handle:
+            log_handle.write(f"\n--- pipeline enfileirado {datetime.now().isoformat()} ---\n")
+            log_handle.write(f"queue: {result.queue_name}\n")
+            log_handle.write(f"message_id: {result.message_id}\n")
+            log_handle.flush()
+
+        with _lock:
+            _log_files[store_db_id] = log_file_path
+
+        return run_id, log_file_path
+    if settings.pipeline_mode != "local":
+        raise RuntimeError(f"pipeline.mode inválido: {settings.pipeline_mode!r}")
+
     worker_python = resolve_worker_python(
         project_root=project_root,
         configured=settings.pipeline_python,

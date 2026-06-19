@@ -23,7 +23,10 @@ class ServerSettings:
     admin_username: str
     admin_password: str
     admin_display_name: str
+    pipeline_mode: str = "local"
     pipeline_python: Path | None = None
+    queue_url: str | None = None
+    queue_name: str = "track-fraude-pipelines"
 
 
 def load_settings(path: Path | str | None = None) -> ServerSettings:
@@ -40,6 +43,7 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
         db_path = (PROJECT_ROOT / db_path).resolve()
 
     pipeline_cfg = raw.get("pipeline", {})
+    pipeline_mode = str(pipeline_cfg.get("mode", "local")).strip().lower()
     pipeline_python_raw = pipeline_cfg.get("python")
     pipeline_python: Path | None = None
     if pipeline_python_raw:
@@ -56,5 +60,8 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
         admin_username=str(auth_cfg.get("admin_username", "admin")),
         admin_password=str(auth_cfg.get("admin_password", "admin123")),
         admin_display_name=str(auth_cfg.get("admin_display_name", "Administrador")),
+        pipeline_mode=pipeline_mode,
         pipeline_python=pipeline_python,
+        queue_url=pipeline_cfg.get("queue_url"),
+        queue_name=str(pipeline_cfg.get("queue_name", "track-fraude-pipelines")),
     )

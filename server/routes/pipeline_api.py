@@ -30,8 +30,12 @@ def _pipeline_status_payload(runs) -> dict:
                 "group_code": run.group_code,
                 "store_id": run.store_id,
                 "date": run.date,
+                "status": run.status,
                 "current_phase": run.current_phase,
                 "current_camera": run.current_camera,
+                "worker_node": run.worker_node,
+                "worker_id": run.worker_id,
+                "job_id": run.job_id,
             }
             for run in runs
         ],

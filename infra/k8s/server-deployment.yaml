@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: track-fraude-server
+  namespace: track-fraude
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: track-fraude-server
+  template:
+    metadata:
+      labels:
+        app: track-fraude-server
+    spec:
+      containers:
+        - name: server
+          image: CHANGE_ME_REGISTRY:5000/track-fraude-server:latest
+          imagePullPolicy: Always
+          command:
+            - python
+            - server/main.py
+            - --settings
+            - /app/server/config/settings.yaml
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: settings
+              mountPath: /app/server/config/settings.yaml
+              subPath: settings.yaml
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: track-fraude-data
+        - name: settings
+          configMap:
+            name: track-fraude-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: track-fraude-server
+  namespace: track-fraude
+spec:
+  type: NodePort
+  selector:
+    app: track-fraude-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080

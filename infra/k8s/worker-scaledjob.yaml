@@ -1,0 +1,68 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-trigger-auth
+  namespace: track-fraude
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: track-fraude-secrets
+      key: rabbitmq-url
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: track-fraude-worker
+  namespace: track-fraude
+spec:
+  pollingInterval: 10
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 10
+  maxReplicaCount: 16
+  jobTargetRef:
+    backoffLimit: 0
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: CHANGE_ME_REGISTRY:5000/track-fraude-worker:latest
+            imagePullPolicy: Always
+            command:
+              - python
+              - jobs/run_pipeline_queue_worker.py
+            env:
+              - name: PIPELINE_QUEUE_URL
+                valueFrom:
+                  secretKeyRef:
+                    name: track-fraude-secrets
+                    key: rabbitmq-url
+              - name: PIPELINE_QUEUE_NAME
+                value: track-fraude-pipelines
+              - name: NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              - name: JOB_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+            volumeMounts:
+              - name: data
+                mountPath: /app/data
+        volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: track-fraude-data
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: track-fraude-pipelines
+        mode: QueueLength
+        value: "1"
+        protocol: amqp
+      authenticationRef:
+        name: rabbitmq-trigger-auth

@@ -1,0 +1,8 @@
+resources:
+  - namespace.yaml
+  - data-nfs-pvc.yaml
+  - app-config.yaml
+  - control-plane-services.yaml
+  - server-deployment.yaml
+  - worker-scaledjob.yaml
+  - nvidia-device-plugin.yaml

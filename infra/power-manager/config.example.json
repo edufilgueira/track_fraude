@@ -1,0 +1,18 @@
+{
+  "rabbitmq_api_url": "http://rabbitmq.local:15672/api/queues/%2F/track-fraude-pipelines",
+  "rabbitmq_username": "track_fraude",
+  "rabbitmq_password": "track_fraude",
+  "namespace": "track-fraude",
+  "worker_label_selector": "scaledjob.keda.sh/name=track-fraude-worker",
+  "poll_interval_sec": 30,
+  "idle_shutdown_after_sec": 900,
+  "nodes": [
+    {
+      "name": "gpu-node-01",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "broadcast": "192.168.0.255",
+      "ssh_host": "gpu-node-01.local",
+      "ssh_user": "ubuntu"
+    }
+  ]
+}
