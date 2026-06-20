@@ -1,0 +1,22 @@
+app:
+  name: track_fraude
+  host: 0.0.0.0
+  port: 8080
+  secret_key: troque-esta-chave-em-producao
+
+database:
+  # sqlite (dev local) | postgres (produção / K3s)
+  backend: postgres
+  path: data/track_fraude.db
+  postgres_url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+
+auth:
+  admin_username: admin
+  admin_password: troque-a-senha
+  admin_display_name: Administrador
+
+pipeline:
+  mode: queue
+  python:
+  queue_url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
+  queue_name: track-fraude-pipelines

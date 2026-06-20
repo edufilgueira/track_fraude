@@ -41,6 +41,11 @@ spec:
                     key: rabbitmq-url
               - name: PIPELINE_QUEUE_NAME
                 value: track-fraude-pipelines
+              - name: TRACK_FRAUDE_DATABASE_URL
+                valueFrom:
+                  secretKeyRef:
+                    name: track-fraude-secrets
+                    key: postgres-url
               - name: NODE_NAME
                 valueFrom:
                   fieldRef:

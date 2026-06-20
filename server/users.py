@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from track_fraude_core.db.connection import get_connection
+from track_fraude_core.db.database import DatabaseConfig, resolve_database
 
 
 @dataclass
@@ -17,11 +18,11 @@ class UserRecord:
 
 
 class UserRepository:
-    def __init__(self, db_path) -> None:
-        self.db_path = db_path
+    def __init__(self, db: DatabaseConfig | str | None = None) -> None:
+        self.db = resolve_database(db)
 
     def _conn(self):
-        return get_connection(self.db_path)
+        return get_connection(self.db)
 
     @staticmethod
     def hash_password(password: str, salt: str | None = None) -> str:
@@ -92,7 +93,7 @@ class UserRepository:
                     username.strip(),
                     password_hash,
                     display_name.strip() or username.strip(),
-                    1 if active else 0,
+                    active,
                 ),
             )
             conn.commit()

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
+from track_fraude_core.db.connection import get_connection, init_database
+from track_fraude_core.db.database import DatabaseConfig, resolve_database
 from track_fraude_core.pipeline_queue import (
     PIPELINE_ACTIVE_STATUSES,
     PIPELINE_STATUS_CANCELLED,
@@ -41,13 +42,13 @@ class PipelineRunRepository:
     STALE_AFTER = timedelta(hours=4)
     CLEANUP_INTERVAL_SEC = 60.0
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+    def __init__(self, db: DatabaseConfig | Path | str | None = None) -> None:
+        self.db = resolve_database(db)
         self._last_cleanup_at = 0.0
-        init_database(self.db_path)
+        init_database(self.db)
 
     def _conn(self):
-        return get_connection(self.db_path)
+        return get_connection(self.db)
 
     def cleanup_stale_runs(self) -> int:
         now = time.monotonic()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from track_fraude_core.db.connection import get_connection, init_database
+from track_fraude_core.db.connection import get_sqlite_connection, init_database
 from track_fraude_core.db import GroupRepository, StoreRepository
 
 
@@ -70,7 +70,7 @@ def test_migrate_legacy_database_without_group_db_id(tmp_path: Path):
     assert default_group is not None
     assert default_group.group_code == "default"
 
-    with get_connection(db_path) as conn:
+    with get_sqlite_connection(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(stores)")}
     assert "group_db_id" in columns
     assert "street" in columns

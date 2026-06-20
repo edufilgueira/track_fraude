@@ -26,11 +26,11 @@ _templates: Jinja2Templates | None = None
 def configure(settings_path: Path | str | None = None) -> ServerSettings:
     global _settings, _store_repo, _group_repo, _user_repo, _pipeline_run_repo, _review_repo, _templates
     _settings = load_settings(settings_path)
-    _store_repo = StoreRepository(_settings.database_path)
-    _group_repo = GroupRepository(_settings.database_path)
-    _user_repo = UserRepository(_settings.database_path)
-    _pipeline_run_repo = PipelineRunRepository(_settings.database_path)
-    _review_repo = ReviewRepository(_settings.database_path)
+    _store_repo = StoreRepository(_settings.database)
+    _group_repo = GroupRepository(_settings.database)
+    _user_repo = UserRepository(_settings.database)
+    _pipeline_run_repo = PipelineRunRepository(_settings.database)
+    _review_repo = ReviewRepository(_settings.database)
     _templates = Jinja2Templates(directory=str(SERVER_DIR / "templates"))
     return _settings
 

@@ -29,7 +29,8 @@ def _log_path(message: PipelineQueueMessage) -> Path:
 
 
 def _run_message(message: PipelineQueueMessage) -> int:
-    repo = PipelineRunRepository(message.db_path)
+    db_target = os.getenv("TRACK_FRAUDE_DATABASE_URL", "").strip() or message.db_path
+    repo = PipelineRunRepository(db_target)
     current = repo.get_run(message.run_id)
     if current is not None and current.status == PIPELINE_STATUS_CANCELLED:
         return 0

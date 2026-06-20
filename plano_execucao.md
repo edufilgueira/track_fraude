@@ -471,3 +471,342 @@ Fase 10 [ ] produção  [ ] DB  [ ] runbook  [ ] LGPD
 Este plano consolida tudo que definimos: batch noturno, JSON/Parquet, fila por câmera + merge, zonas, multi-pessoa, multi-sessão no caixa, buffers, regras R1–R5 e revisão com clips.
 
 Se quiser, em **Agent mode** posso gravar este plano no `esbouço.md` como seção **“Plano final de execução”** e alinhar as semanas antigas (839+) a estas 10 fases para ficar um único guia no repositório.
+
+
+
+
+---
+---
+---
+---
+# Ajustando Arquitetura
+---
+---
+---
+---
+
+
+
+# Plano Atlas Worker
+
+**Projeto:** `atlas-worker` — hub serverless GPU on-prem (estilo RunPod)  
+**Versão:** 1.0  
+**Produtos exemplo:** `track-fraude`, `kiaia` (vLLM), ComfyUI, outros  
+
+---
+
+## 1. O que é o Atlas Worker
+
+**Atlas Worker** é a **plataforma** de orquestração serverless. Ela **não executa inferência** — enfileira jobs, escala workers efêmeros na GPU e expõe status.
+
+```text
+Cliente (okiaia.com, automação, UIs de produto)
+        ↓ HTTPS + API Key
+   Atlas Platform API
+        ↓
+   RabbitMQ (fila por workload)
+        ↓
+   KEDA → Job GPU efêmero (imagem do registry)
+```
+
+Quem chama o Atlas informa **`workload_slug` + payload**. Não precisa saber fila, node, imagem ou modelo — isso está cadastrado no **Atlas Hub**.
+
+| É Atlas Worker | Não é Atlas Worker |
+|----------------|-------------------|
+| Platform API, Hub UI, Fleet | Pipeline YOLO / evidências |
+| Catálogo registry + preparar worker | Modelo Kiaia (produto vLLM) |
+| Filas, KEDA, Postgres `atlas.*` | Cadastro lojas track_fraude |
+| Power Manager por pool GPU | Site okiaia.com (nuvem) |
+
+---
+
+## 2. Produtos vs plataforma
+
+```text
+Atlas Worker (plataforma)
+├── track-fraude          → imagem track-fraude-worker, pool video
+├── kiaia                 → imagem vLLM + volume do modelo, pool llm
+├── comfyui-sdxl          → imagem ComfyUI, pool general
+└── (futuros workloads)
+```
+
+Cada produto: **imagem própria**, **fila própria**, **ScaledJob próprio**, **pool GPU** (sem compartilhar GPU entre vídeo 24h e LLM).
+
+**track-fraude-ui** = painel **opcional** do produto (cadastro lojas, monitor). Não faz parte do core Atlas; roda no **K3s**, não é essencial ao processamento.
+
+---
+
+## 3. Arquitetura de deploy
+
+```text
+docker-compose.infra.yml (control plane)
+  registry :5000
+  rabbitmq
+  postgres
+
+K3s
+  atlas-platform-api      # gateway serverless
+  atlas-hub-ui              # tela RunPod-like
+  track-fraude-ui           # opcional — produto
+  ScaledJobs por workload   # GPU nos nodes
+
+GPU nodes
+  k3s-agent, NVIDIA, NFS
+```
+
+- **Compose:** só infra compartilhada (+ Platform API opcional no compose em dev).  
+- **K3s:** apps Atlas, UIs, todos os workers GPU.  
+- **Rede externa:** `api.okiaia.com` → Mikrotik/Cloudflare Tunnel → **Atlas Platform API**.
+
+---
+
+## 4. Modelo de dados (Postgres schema `atlas`)
+
+```text
+atlas.registry_images       # sync com registry local
+atlas.workloads             # slug, imagem, fila, pool, volumes, env, command
+atlas.workload_revisions    # YAML gerado, checksum, applied_at
+atlas.jobs                  # job_id, workload_id, status, payload, result
+atlas.hosts                 # IP, MAC, hostname, pool
+atlas.gpu_pools             # video | llm | general
+atlas.service_bindings      # registry, nfs, rabbitmq, postgres por host
+atlas.api_keys              # tenant, scopes, hash
+
+track_fraude.*              # lojas, câmeras, pipeline_runs (produto)
+```
+
+---
+
+## 5. Organização de código (evolução do monorepo)
+
+```text
+atlas-worker/                    # repo (pode nascer do track_fraude evoluindo)
+├── atlas/
+│   ├── platform/                # Platform API
+│   ├── hub/                     # UI registry + workloads (RunPod-like)
+│   ├── fleet/                   # nodes, export YAML
+│   ├── db/                      # migrations atlas.*
+│   └── templates/k8s/           # ScaledJob genérico
+│
+├── products/
+│   └── track_fraude/
+│       ├── core/                # contrato fila, repos lojas
+│       ├── worker/              # src/ + jobs/ GPU
+│       └── ui/                  # server/ monitor + cadastro
+│
+├── infra/
+│   ├── docker-compose.infra.yml
+│   └── k8s/
+│       ├── atlas/               # api, hub
+│       └── workloads/           # por slug
+│
+├── Dockerfile.atlas-platform-api
+├── Dockerfile.atlas-hub
+├── Dockerfile.track-fraude-worker
+└── Dockerfile.track-fraude-ui
+```
+
+Produtos futuros (`kiaia-vllm`, ComfyUI): repo ou pasta `products/` + registro no Hub.
+
+---
+
+## Fases
+
+---
+
+### Fase 0 — Base operacional  
+**Duração sugerida:** 1–2 semanas  
+**Objetivo:** cluster atual estável; fila track_fraude funciona de ponta a ponta.  
+**Guia:** [docs/fase0_base_operacional.md](docs/fase0_base_operacional.md)
+
+| # | Entrega | Detalhe | Status |
+|---|---------|---------|--------|
+| 0.1 | Control plane estável | Registry, RabbitMQ, Postgres via compose; K3s no ctrlp01 | Manual (ctrlp01) |
+| 0.2 | Worker GPU | ScaledJob `track-fraude-worker` processa job da fila | Manifest OK |
+| 0.3 | Sync código | Git no ctrlp01; eliminar deploy manual inconsistente | Doc |
+| 0.4 | Postgres | Migrar cadastros/pipeline_runs SQLite → Postgres | **Código + K8s** |
+| 0.5 | Modo fila | `pipeline.mode: queue` em produção | **K8s ConfigMap** |
+
+Verificação: `python tools/verify_fase0.py`
+
+**Critério de saída:** job enfileirado completa **com UI desligada**.
+
+**Não fazer:** Atlas Hub, renomear repos, multi-workload.
+
+---
+
+### Fase 1 — Fundação Atlas (banco + API mínima)  
+**Duração sugerida:** 2–3 semanas  
+**Objetivo:** Atlas existe como serviço; track_fraude vira **primeiro workload** registrado.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 1.1 | Schema `atlas.*` | `workloads`, `jobs`, `api_keys`, seed mínimo |
+| 1.2 | Seed workload | `track-fraude`: fila, imagem, namespace, pool `video` |
+| 1.3 | Atlas Platform API | `POST /v1/jobs`, `GET /v1/jobs/{id}`, `GET /v1/health` |
+| 1.4 | Enqueue único | track-fraude-ui publica jobs **só via Platform API** (não RabbitMQ direto) |
+| 1.5 | Contrato job | Platform API → RabbitMQ → worker existente (payload inalterado) |
+| 1.6 | Dockerfile | `Dockerfile.atlas-platform-api` (slim, sem GPU) |
+
+**Critério de saída:** Play na UI → Platform API → fila → worker; status em `atlas.jobs` + `pipeline_runs`.
+
+**Deploy:** Platform API no **K3s** (Deployment + Service).
+
+---
+
+### Fase 2 — Desacoplamento track_fraude (worker ≠ UI)  
+**Duração sugerida:** 2–3 semanas  
+**Objetivo:** produto track_fraude em dois componentes deployáveis.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 2.1 | Imagens separadas | `track-fraude-worker` (CUDA) vs `track-fraude-ui` (slim) |
+| 2.2 | Remover modo local | Apagar subprocess pipeline em `pipeline_runner`; só Atlas API |
+| 2.3 | K8s manifests | Renomear deployment → `track-fraude-ui`; worker ScaledJob inalterado na fila |
+| 2.4 | Limites de import | Worker não importa `server/`; UI não importa Ultralytics |
+| 2.5 | Teste isolamento | Matar pod UI → worker termina job; religar UI → status visível |
+
+**Critério de saída:** rebuild UI não rebuilda worker; processamento independente da UI.
+
+---
+
+### Fase 3 — Atlas Hub MVP (tela estilo RunPod)  
+**Duração sugerida:** 3–4 semanas  
+**Objetivo:** registrar workloads pelo Hub, sem editar YAML na mão.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 3.1 | Atlas Hub UI | Listar imagens do registry (`/v2/_catalog`) |
+| 3.2 | CRUD workloads | Imagem, tag, fila, pool GPU, namespace, env, command |
+| 3.3 | Volumes | Escolher path NFS/PVC (modelo, data) por workload |
+| 3.4 | Gerador K8s | Template ScaledJob + ConfigMap a partir de `atlas.workloads` |
+| 3.5 | Preview + export | Diff YAML; download zip ou `kubectl apply` |
+| 3.6 | Test enqueue | Botão “job de teste” → Platform API |
+| 3.7 | Segundo workload piloto | Ex.: `kiaia` (vLLM) ou ComfyUI — validar fluxo genérico |
+
+**Critério de saída:** nova imagem no registry → cadastro no Hub → fila → Job GPU **sem SSH/YAML manual**.
+
+**Deploy:** `atlas-hub-ui` no **K3s** (NodePort ou Ingress interno).
+
+---
+
+### Fase 4 — Atlas Fleet (rede e infra)  
+**Duração sugerida:** 2–3 semanas  
+**Objetivo:** topologia LAN no banco; gerar configs de rede/cluster.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 4.1 | CRUD hosts | Nome, IP LAN, MAC, hostname K8s/DNS, SSH |
+| 4.2 | GPU pools | `video`, `llm`, `general`; associar hosts |
+| 4.3 | Service bindings | Onde rodam registry, RabbitMQ, Postgres, NFS |
+| 4.4 | Export | `app-config.yaml`, power-manager config, `/etc/hosts`, registries.yaml |
+| 4.5 | Power Manager | Ler nodes de `atlas.hosts`; WOL por pool |
+| 4.6 | Validação | Ping/SSH/checklist “cadastrado vs alcançável” |
+
+**Critério de saída:** trocar IP do control plane no Fleet → export → cluster operacional.
+
+---
+
+### Fase 5 — Exposição externa (okiaia.com)  
+**Duração sugerida:** 2–4 semanas  
+**Objetivo:** nuvem enfileira jobs no Atlas com API key.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 5.1 | API keys | CRUD admin, scopes por workload (`track-fraude:enqueue`, `kiaia:enqueue`) |
+| 5.2 | DNS + TLS | `api.okiaia.com` (Mikrotik DDNS ou Cloudflare Tunnel) |
+| 5.3 | Rate limit | Por key/tenant |
+| 5.4 | Webhook (opcional) | Job concluído → backend okiaia.com |
+| 5.5 | Documentação OpenAPI | Contrato para backend okiaia |
+
+**Critério de saída:** backend na nuvem enfileira job; sem key → 401; worker local processa; okiaia não acessa RabbitMQ/workers.
+
+---
+
+### Fase 6 — Multi-workload maduro  
+**Duração sugerida:** contínuo  
+**Objetivo:** Atlas como hub genérico; vários produtos em paralelo.
+
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 6.1 | Produto **kiaia** | Workload vLLM, volume modelos, fila `kiaia-inference`, pool `llm` |
+| 6.2 | Templates Hub | Presets vLLM, ComfyUI, track-fraude |
+| 6.3 | Namespaces | Um namespace K8s por workload |
+| 6.4 | Observabilidade | Status filas (RabbitMQ API), jobs por workload no Hub |
+| 6.5 | Políticas GPU | 1 GPU = 1 job; nodeSelector/taints por pool |
+
+**Critério de saída:** track_fraude + kiaia rodando simultaneamente em pools separados.
+
+---
+
+### Fase 7 — Split de repos (opcional)  
+**Gatilho:** times ou releases independentes.
+
+| Repo | Conteúdo |
+|------|----------|
+| `atlas-worker` | platform + hub + fleet + infra base |
+| `track-fraude` | core + worker + ui |
+| `kiaia-vllm` (ou similar) | imagem + handler produto |
+| `okiaia-backend` | site na nuvem |
+
+Contrato compartilhado: pacote `atlas-contracts` (schemas fila + OpenAPI).
+
+---
+
+## 6. Decisões registradas
+
+| # | Decisão |
+|---|---------|
+| 1 | Projeto plataforma = **Atlas Worker** |
+| 2 | **Kiaia** = produto (vLLM), não nome da plataforma |
+| 3 | **track_fraude** = produto (pipeline vídeo) |
+| 4 | Atlas = **somente serverless** (enqueue + scale + status) |
+| 5 | Hub lista registry, escolhe imagem + volume, prepara ScaledJob |
+| 6 | Compose = registry, RabbitMQ, Postgres |
+| 7 | Platform API, Hub, track-fraude-ui, workers = **K3s** |
+| 8 | track-fraude-ui **opcional**; worker não depende dela |
+| 9 | Enfileiramento preferencial: **tudo via Atlas Platform API** |
+| 10 | okiaia.com → `api.okiaia.com` → Atlas API + key |
+
+---
+
+## 7. Métricas de sucesso
+
+| Métrica | Alvo |
+|---------|------|
+| Nova imagem → job GPU | &lt; 15 min via Hub |
+| UI track_fraude offline | Worker conclui jobs na fila |
+| Cliente externo enqueue | &lt; 2 s; 401 sem key |
+| Workloads paralelos | Pools GPU isolados |
+| Mudança IP control plane | Fleet export, sem editar YAML manual |
+
+---
+
+## 8. Ordem visual das fases
+
+```text
+Fase 0  Base (cluster + fila + Postgres)
+   ↓
+Fase 1  Atlas DB + Platform API + track-fraude como workload #1
+   ↓
+Fase 2  track-fraude worker ≠ UI (imagens separadas)
+   ↓
+Fase 3  Atlas Hub MVP (RunPod-like)
+   ↓
+Fase 4  Atlas Fleet (rede, nodes, export)
+   ↓
+Fase 5  api.okiaia.com + API keys
+   ↓
+Fase 6  kiaia (vLLM) + ComfyUI + …
+   ↓
+Fase 7  Split repos (se necessário)
+```
+
+---
+
+## 9. Próximo passo imediato (Fase 1)
+
+1. Criar `infra/postgres/schema_atlas.sql`
+2. Esqueleto `atlas/platform/` com API mínima
+3. Seed workload `track-fraude`
+4. Adaptar track-fraude-ui para enfileirar via Platform API

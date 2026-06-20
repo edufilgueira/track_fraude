@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
+from track_fraude_core.db.connection import get_connection, init_database
+from track_fraude_core.db.database import DatabaseConfig, resolve_database
 
 REVIEW_STATUS_PENDING = "pending_review"
 REVIEW_STATUS_CONFIRMED = "confirmed"
@@ -27,12 +28,12 @@ class AlertReviewRecord:
 
 
 class ReviewRepository:
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
-        init_database(self.db_path)
+    def __init__(self, db: DatabaseConfig | Path | str | None = None) -> None:
+        self.db = resolve_database(db)
+        init_database(self.db)
 
     def _conn(self):
-        return get_connection(self.db_path)
+        return get_connection(self.db)
 
     def get_decision(
         self, store_db_id: int, date: str, alert_id: str

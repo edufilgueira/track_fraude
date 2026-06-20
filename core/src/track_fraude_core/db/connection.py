@@ -3,7 +3,16 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path("data/track_fraude.db")
+from track_fraude_core.db.database import DEFAULT_DB_PATH
+
+__all__ = [
+    "DEFAULT_DB_PATH",
+    "DbConnection",
+    "SCHEMA",
+    "get_connection",
+    "get_sqlite_connection",
+    "init_database",
+]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS groups (
@@ -132,7 +141,7 @@ DEFAULT_GROUP_CODE = "default"
 DEFAULT_GROUP_NAME = "Grupo Padrão"
 
 
-def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
+def get_sqlite_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
     path = Path(db_path) if db_path else DEFAULT_DB_PATH
     if not path.is_absolute():
         path = path.resolve()
@@ -441,9 +450,9 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         )
 
 
-def init_database(db_path: Path | str | None = None) -> Path:
+def _init_sqlite_database(db_path: Path | str | None = None) -> Path:
     path = Path(db_path) if db_path else DEFAULT_DB_PATH
-    with get_connection(path) as conn:
+    with get_sqlite_connection(path) as conn:
         conn.executescript(SCHEMA)
         _migrate_legacy_schema(conn)
         _migrate_cameras_and_zones(conn)
@@ -451,3 +460,23 @@ def init_database(db_path: Path | str | None = None) -> Path:
         _ensure_indexes(conn)
         conn.commit()
     return path
+
+
+def get_connection(source=None):
+    from track_fraude_core.db.session import get_connection as _get_connection
+
+    return _get_connection(source)
+
+
+def init_database(source=None):
+    from track_fraude_core.db.session import init_database as _init_database
+
+    return _init_database(source)
+
+
+def __getattr__(name: str):
+    if name == "DbConnection":
+        from track_fraude_core.db.session import DbConnection
+
+        return DbConnection
+    raise AttributeError(name)

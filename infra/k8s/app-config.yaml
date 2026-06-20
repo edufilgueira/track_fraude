@@ -23,7 +23,8 @@ data:
       secret_key: 85b85c880b4298d3758f23bae369dcbd07eb69e82da188d37ef09a669a18938f
 
     database:
-      path: /app/data/track_fraude.db
+      backend: postgres
+      postgres_url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
 
     auth:
       admin_username: admin

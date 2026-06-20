@@ -26,10 +26,10 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = load_settings(args.settings)
-    db_path = init_database(settings.database_path)
-    print(f"Schema OK: {db_path}")
+    db = init_database(settings.database)
+    print(f"Schema OK: {db.dsn}")
 
-    user_repo = UserRepository(settings.database_path)
+    user_repo = UserRepository(settings.database)
     user_repo.seed_admin(
         username=settings.admin_username,
         password=settings.admin_password,

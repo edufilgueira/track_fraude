@@ -41,7 +41,7 @@ def main() -> None:
         print(f"Painel web (rede):  http://<IP-do-servidor>:{port}/login")
     else:
         print(f"Painel web: http://{host}:{port}/login")
-    print(f"SQLite: {settings.database_path}")
+    print(f"Banco: {settings.database_dsn}")
     print(f"Usuário padrão: {settings.admin_username}")
     uvicorn.run(app, host=host, port=port, reload=args.reload)
 

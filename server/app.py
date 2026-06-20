@@ -20,7 +20,7 @@ PUBLIC_PATHS = {"/login", "/health"}
 
 def create_app(settings_path: Path | str | None = None) -> FastAPI:
     settings = configure(settings_path)
-    init_database(settings.database_path)
+    init_database(settings.database)
 
     user_repo = get_user_repo()
     user_repo.seed_admin(

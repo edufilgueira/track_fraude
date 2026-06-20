@@ -28,7 +28,8 @@ from track_fraude_core.db.alert_rule_defaults import (
     T_RETURN_SEC,
     VID_STRIDE,
 )
-from track_fraude_core.db.connection import DEFAULT_DB_PATH, get_connection, init_database
+from track_fraude_core.db.connection import get_connection, init_database
+from track_fraude_core.db.database import DatabaseConfig, resolve_database
 
 
 @dataclass
@@ -105,12 +106,12 @@ class CameraZoneRecord:
 
 
 class StoreRepository:
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
-        init_database(self.db_path)
+    def __init__(self, db: DatabaseConfig | Path | str | None = None) -> None:
+        self.db = resolve_database(db)
+        init_database(self.db)
 
     def _conn(self):
-        return get_connection(self.db_path)
+        return get_connection(self.db)
 
     @staticmethod
     def _store_from_row(row: Any) -> StoreRecord:

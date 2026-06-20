@@ -9,5 +9,8 @@ description = "Schema SQLite e configuração de lojas (compartilhado web + work
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+
 [tool.setuptools.packages.find]
 where = ["src"]

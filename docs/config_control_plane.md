@@ -12,6 +12,8 @@ Neste cenário inicial:
 
 > **Onde editar os arquivos?** Os passos 10 e 11 assumem que você edita e aplica os manifests **no próprio `ctrlp01`** (`~/track_fraude`). Se você editar no Windows (ou outro PC), precisa **sincronizar** antes do `kubectl apply` — veja [Sincronizar alterações no servidor](#sincronizar-alterações-no-servidor).
 
+> **Fase 0 (Atlas Worker):** checklist e critérios de saída em [fase0_base_operacional.md](fase0_base_operacional.md).
+
 ---
 
 ## O que este PC faz

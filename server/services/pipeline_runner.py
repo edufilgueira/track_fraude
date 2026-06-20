@@ -212,7 +212,7 @@ def start_daily_pipeline(
             group_code=group_code,
             store_id=store_id,
             date=date,
-            db_path=str(settings.database_path),
+            db_path=settings.database_dsn,
             log_path=str(log_file_path),
         )
 
@@ -245,7 +245,7 @@ def start_daily_pipeline(
 
     run_id = repo.start_run(store_db_id, date)
 
-    db_path = str(settings.database_path)
+    db_path = settings.database_dsn
     script = project_root / "jobs" / "run_daily_pipeline.py"
     command = [
         str(worker_python),
