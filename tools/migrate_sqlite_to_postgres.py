@@ -19,6 +19,31 @@ TABLES = (
 )
 
 
+def _pg_boolean_columns(pg_conn, table: str) -> set[str]:
+    with pg_conn.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND data_type = 'boolean'
+            """,
+            (table,),
+        )
+        return {str(row[0]) for row in cursor.fetchall()}
+
+
+def _convert_value(column: str, value, boolean_columns: set[str]):
+    if column in boolean_columns and value is not None:
+        return bool(int(value))
+    return value
+
+
+def _row_to_tuple(row: sqlite3.Row, columns: list[str], boolean_columns: set[str]) -> tuple:
+    return tuple(_convert_value(col, row[col], boolean_columns) for col in columns)
+
+
 def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return [str(row[1]) for row in rows]
@@ -33,14 +58,16 @@ def _copy_table(sqlite_conn: sqlite3.Connection, pg_conn, table: str) -> int:
     if not rows:
         return 0
 
+    boolean_columns = _pg_boolean_columns(pg_conn, table)
     placeholders = ", ".join(["%s"] * len(columns))
     quoted_columns = ", ".join(columns)
     updates = ", ".join(f"{column} = EXCLUDED.{column}" for column in columns if column != "id")
     conflict = f"ON CONFLICT (id) DO UPDATE SET {updates}" if "id" in columns else ""
     sql = f"INSERT INTO {table} ({quoted_columns}) VALUES ({placeholders}) {conflict}"
 
+    payload = [_row_to_tuple(row, columns, boolean_columns) for row in rows]
     with pg_conn.cursor() as cursor:
-        cursor.executemany(sql, [tuple(row[column] for column in columns) for row in rows])
+        cursor.executemany(sql, payload)
     return len(rows)
 
 
