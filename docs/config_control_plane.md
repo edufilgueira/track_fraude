@@ -37,7 +37,7 @@ Preencha estes valores (anote num papel ou arquivo):
 
 | Variável             | Exemplo                | Seu valor      |
 | -------------------- | ---------------------- | -------------- |
-| `PC1_IP`             | `192.168.0.10`         | ______________ |
+| `PC1_IP`             | `192.168.0.199`        | ______________ |
 | `PC1_HOSTNAME`       | `ctrl_p01`             | ______________ |
 | `USUARIO`            | `ubuntu`               | ______________ |
 | `SENHA_ADMIN_PAINEL` | troque em produção     | ______________ |
@@ -88,6 +88,16 @@ sudo apt install -y \
   build-essential pkg-config
 ```
 
+fuso horario
+
+```bash
+timedatectl list-timezones | grep Sao_Paulo
+sudo timedatectl set-timezone America/Sao_Paulo
+timedatectl
+timedatectl status # Procure por System clock synchronized: yes
+sudo timedatectl set-ntp true
+```
+
 Defina hostname e IP fixo (ajuste interface e IP):
 
 ```bash
@@ -101,7 +111,7 @@ network:
     enp3s0:
       dhcp4: false
       addresses:
-        - 192.168.0.10/24
+        - 192.168.0.199/24
       routes:
         - to: default
           via: 192.168.0.1
@@ -125,7 +135,8 @@ whoami
 sudo ufw status
 
 sudo ufw allow OpenSSH
-sudo ufw allow 8080/tcp    # painel web
+sudo ufw allow 8080/tcp    # painel web (Docker direto, Passo 12)
+sudo ufw allow 30080/tcp   # painel web no K3s (NodePort, Passo 11)
 sudo ufw allow 5000/tcp    # registry
 sudo ufw allow 5672/tcp    # rabbitmq
 sudo ufw allow 15672/tcp   # rabbitmq management
@@ -252,10 +263,10 @@ kubectl get nodes
 
 ## Passo 7 — Registry local no K3s
 
-Substitua `PC1_IP` pelo IP real (ex.: `192.168.0.10`):
+Substitua `PC1_IP` pelo IP real (ex.: `192.168.0.199`):
 
 ```bash
-PC1_IP=192.168.0.10
+PC1_IP=192.168.0.199
 
 sudo mkdir -p /etc/rancher/k3s
 sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<EOF
@@ -277,6 +288,9 @@ kubectl get nodes
 
 - K3s reiniciou sem erro
 
+> O `registries.yaml` acima vale só para o **K3s puxar imagens** nos pods.
+> O comando `docker push` no host usa o Docker Engine e precisa do passo **9.1**.
+
 ---
 
 ## Passo 8 — KEDA (scheduler por fila)
@@ -294,9 +308,57 @@ Aguarde pods `keda-operator` e `keda-metrics-apiserver` ficarem `Running`.
 
 ## Passo 9 — Build e push das imagens Docker
 
+### 9.1 Registry HTTP no Docker host (obrigatório antes do push)
+
+O registry local (`registry:2` no Compose) fala **HTTP** na porta 5000, sem TLS.
+Por padrão o Docker tenta **HTTPS** e o push falha com:
+
+```text
+http: server gave HTTP response to HTTPS client
+```
+
+Configure `insecure-registries` no Docker Engine do PC1 (substitua o IP):
+
+```bash
+PC1_IP=192.168.0.199   # ajuste
+
+sudo tee /etc/docker/daemon.json >/dev/null <<EOF
+{
+  "insecure-registries": [
+    "${PC1_IP}:5000",
+    "localhost:5000",
+    "127.0.0.1:5000"
+  ]
+}
+EOF
+
+sudo systemctl restart docker
+```
+
+Confirme:
+
+```bash
+docker info 2>/dev/null | grep -A5 "Insecure Registries"
+```
+
+Deve listar `${PC1_IP}:5000`.
+
+> Se já existir `/etc/docker/daemon.json`, **não sobrescreva** o arquivo inteiro.
+> Adicione `"insecure-registries"` ao JSON existente e reinicie o Docker.
+
+### 9.2 Build e push
+
+Confirme que o registry está no ar:
+
 ```bash
 cd ~/track_fraude
-PC1_IP=192.168.0.10   # ajuste
+docker compose -f docker-compose.infra.yml up -d registry
+```
+
+Build e push:
+
+```bash
+PC1_IP=192.168.0.199   # ajuste
 
 docker build -f Dockerfile.server -t ${PC1_IP}:5000/track-fraude-server:latest .
 docker build -f Dockerfile.worker -t ${PC1_IP}:5000/track-fraude-worker:latest .
@@ -305,17 +367,26 @@ docker push ${PC1_IP}:5000/track-fraude-server:latest
 docker push ${PC1_IP}:5000/track-fraude-worker:latest
 ```
 
+Sucesso esperado no push:
+
+```text
+latest: digest: sha256:... size: ...
+```
+
 Validação:
 
 ```bash
 curl -s http://${PC1_IP}:5000/v2/_catalog
+curl -s http://${PC1_IP}:5000/v2/track-fraude-server/tags/list
+curl -s http://${PC1_IP}:5000/v2/track-fraude-worker/tags/list
 ```
 
-Deve listar `track-fraude-server` e `track-fraude-worker`.
+O `_catalog` deve listar `track-fraude-server` e `track-fraude-worker`.
 
 - Imagens no registry local
 
 > O build do worker é pesado (CUDA/PyTorch). Pode levar vários minutos na primeira vez.
+> O push do worker também pode demorar (imagem grande).
 
 ---
 
@@ -325,56 +396,105 @@ Edite os placeholders antes de aplicar.
 
 ### 10.1 NFS (`infra/k8s/data-nfs-pvc.yaml`)
 
-Troque:
+Confirme que `server` e `path` apontam para o storage deste PC:
 
 ```yaml
-server: CHANGE_ME_NAS_IP
-path: /exports/track_fraude/data
+nfs:
+  server: 192.168.0.199        # PC1_IP
+  path: /srv/track_fraude/data
 ```
 
-Por:
+O manifest usa `storageClassName: track-fraude-nfs` no PV e no PVC. No K3s, sem isso o PVC herda `local-path` (padrão) e fica em `Pending` com `VolumeMismatch`.
 
-```yaml
-server: 192.168.0.10        # PC1_IP
-path: /srv/track_fraude/data
-```
+> Confirme no servidor antes do apply: `grep storageClassName infra/k8s/data-nfs-pvc.yaml` deve listar **duas** linhas. Se vier vazio, o arquivo no `ctrlp01` está desatualizado (`git pull` ou copie do repo).
 
 ### 10.2 Imagens (`infra/k8s/server-deployment.yaml` e `worker-scaledjob.yaml`)
 
-Troque `CHANGE_ME_REGISTRY:5000` por `192.168.0.10:5000`.
+Troque `CHANGE_ME_REGISTRY:5000` por `${PC1_IP}:5000` (ex.: `192.168.0.199:5000`) **nos dois arquivos**.
 
 ### 10.3 Segredos (`infra/k8s/app-config.yaml`)
 
-Troque `CHANGE_ME_RANDOM_SECRET` por uma chave forte e ajuste senha do admin se quiser.
+Gere uma chave forte no terminal:
 
-### 10.4 RabbitMQ no worker (host, não cluster interno)
-
-Os serviços RabbitMQ rodam via **docker-compose no host**, não dentro do K8s.  
-Edite `infra/k8s/app-config.yaml` e o Secret para usar o IP do PC1:
-
-```yaml
-queue_url: amqp://track_fraude:track_fraude@192.168.0.10:5672/%2F
+```bash
+openssl rand -hex 32
 ```
 
-E em `infra/k8s/worker-scaledjob.yaml`, confirme:
+Use **o mesmo valor** em `secret-key` (Secret) e `secret_key` (ConfigMap). Troque também `admin_password` se quiser.
+
+### 10.4 RabbitMQ e Postgres no host (não no cluster K8s)
+
+RabbitMQ e Postgres rodam via **docker-compose no host** (`docker-compose.infra.yml`), não como pods no K3s.
+
+Edite **somente** `infra/k8s/app-config.yaml` — troque `rabbitmq.track-fraude.svc.cluster.local` (ou placeholder) pelo IP do PC1.
+
+No **Secret** (`stringData`):
+
+```yaml
+rabbitmq-url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
+postgres-url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+```
+
+No **ConfigMap** (`settings.yaml` → `pipeline`):
+
+```yaml
+queue_url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
+```
+
+**Não** coloque a URL do RabbitMQ diretamente em `worker-scaledjob.yaml`. O worker e o KEDA já leem `rabbitmq-url` do Secret:
 
 ```yaml
 - name: PIPELINE_QUEUE_URL
-  value: amqp://track_fraude:track_fraude@192.168.0.10:5672/%2F
+  valueFrom:
+    secretKeyRef:
+      name: track-fraude-secrets
+      key: rabbitmq-url
 ```
 
-> Use o IP da LAN (`PC1_IP`), não `127.0.0.1`, porque os pods do K3s precisam alcançar o RabbitMQ no host.
+Confirme que `worker-scaledjob.yaml` está assim (é o padrão do repositório). Se estiver, nenhuma edição extra no worker é necessária — basta corrigir `app-config.yaml` e aplicar de novo.
+
+> Use o IP da LAN (`PC1_IP`), não `127.0.0.1`, porque os pods do K3s não alcançam `localhost` do host.
 
 Checklist de edição:
 
 - `data-nfs-pvc.yaml` com IP e path corretos
 - Imagens com `${PC1_IP}:5000`
 - `secret-key` trocada
-- `queue_url` apontando para `PC1_IP:5672`
+- `app-config.yaml`: `rabbitmq-url` e `queue_url` com `PC1_IP:5672`
+- `worker-scaledjob.yaml`: `PIPELINE_QUEUE_URL` via `secretKeyRef` (sem URL hardcoded)
+
+### 10.5 Conferir antes do `kubectl apply`
+
+**Não aplique** os manifests com placeholders ainda presentes. Valide no terminal:
+
+```bash
+cd ~/track_fraude
+PC1_IP=192.168.0.199   # ajuste
+
+grep -nE 'CHANGE_ME|cluster\.local' infra/k8s/*.yaml || echo "OK: sem placeholders óbvios"
+grep -n 'image:' infra/k8s/server-deployment.yaml infra/k8s/worker-scaledjob.yaml
+grep -nE 'server:|path:|storageClassName' infra/k8s/data-nfs-pvc.yaml
+grep -nE 'rabbitmq-url|queue_url' infra/k8s/app-config.yaml
+```
+
+Esperado:
+
+- Imagens com `${PC1_IP}:5000` (não `CHANGE_ME_REGISTRY`)
+- NFS com `server: ${PC1_IP}` e `storageClassName: track-fraude-nfs` (duas linhas no grep)
+- RabbitMQ com `${PC1_IP}:5672` (não `cluster.local`)
+- Nenhum `CHANGE_ME_*` restante nos arquivos que você vai aplicar
 
 ---
 
 ## Passo 11 — Aplicar manifests no cluster
+
+Confirme o **Passo 10.5** antes de continuar. Aplique **somente depois** de editar os YAMLs no disco — o `kubectl apply` usa os arquivos locais, não o que está só no seu PC de desenvolvimento.
+
+Confirme também que a infra Docker está no ar:
+
+```bash
+docker compose -f docker-compose.infra.yml ps
+```
 
 Ainda na raiz do repo:
 
@@ -411,6 +531,28 @@ Painel via Kubernetes:
 http://PC1_IP:30080/login
 ```
 
+Se o PVC ficou `Pending` com `storageClassName does not match`:
+
+```bash
+# 1. Arquivo no servidor tem storageClassName? (obrigatório)
+grep storageClassName infra/k8s/data-nfs-pvc.yaml
+
+# 2. Recriar PV+PVC (PV antigo pode ter storage class diferente)
+kubectl delete pvc track-fraude-data -n track-fraude --ignore-not-found
+kubectl delete pv track-fraude-data-nfs --ignore-not-found
+kubectl apply -f infra/k8s/data-nfs-pvc.yaml
+
+kubectl get pvc -n track-fraude   # deve mostrar Bound
+kubectl rollout restart deployment/track-fraude-server -n track-fraude
+```
+
+Se o pod mostrar `Image: CHANGE_ME_REGISTRY:5000/...`, o deployment no servidor ainda não foi editado — corrija `server-deployment.yaml` e reaplique:
+
+```bash
+kubectl apply -f infra/k8s/server-deployment.yaml
+kubectl rollout restart deployment/track-fraude-server -n track-fraude
+```
+
 ---
 
 ## Passo 12 — Painel em `mode: queue` (alternativa: Docker no host)
@@ -435,7 +577,7 @@ auth:
 pipeline:
   mode: queue
   python:
-  queue_url: amqp://track_fraude:track_fraude@192.168.0.10:5672/%2F
+  queue_url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
   queue_name: track-fraude-pipelines
 ```
 
@@ -443,7 +585,7 @@ Subir painel:
 
 ```bash
 cd ~/track_fraude
-PC1_IP=192.168.0.10
+PC1_IP=192.168.0.199
 
 docker run -d --name track-fraude-server --restart unless-stopped \
   -p 8080:8080 \
@@ -528,7 +670,7 @@ sudo systemctl enable --now track-fraude-power-manager
 Execute esta checklist:
 
 ```bash
-PC1_IP=192.168.0.10
+PC1_IP=192.168.0.199
 
 # Infra Docker
 docker compose -f ~/track_fraude/docker-compose.infra.yml ps
@@ -600,12 +742,14 @@ Capacidade:
 5. [ ] K3s server
 6. [ ] Registry no K3s
 7. [ ] KEDA
-8. [ ] Build/push imagens
-9. [ ] Editar manifests (`PC1_IP`, NFS, secrets)
-10. [ ] `kubectl apply` namespace, nfs, app, server, worker
-11. [ ] Painel `mode: queue`
-12. [ ] Validar serviços
-13. [ ] Adicionar GPU node (próximo guia)
+8. [ ] `insecure-registries` no Docker (`daemon.json`)
+9. [ ] Build/push imagens
+10. [ ] Editar manifests (`PC1_IP`, NFS, secrets, RabbitMQ)
+11. [ ] Conferir YAMLs com `grep` (Passo 10.5)
+12. [ ] `kubectl apply` namespace, nfs, app, server, worker
+13. [ ] Painel `mode: queue`
+14. [ ] Validar serviços
+15. [ ] Adicionar GPU node (próximo guia)
 
 ---
 
@@ -627,13 +771,17 @@ Capacidade:
 ## Problemas comuns
 
 
-| Sintoma               | Causa provável                       | Ação                                       |
-| --------------------- | ------------------------------------ | ------------------------------------------ |
-| Pod worker não sobe   | Sem GPU node no cluster              | Adicionar GPU node                         |
-| `ImagePullBackOff`    | Registry inacessível                 | Conferir `PC1_IP:5000` e `registries.yaml` |
-| Play não enfileira    | `mode: local` ou URL RabbitMQ errada | `mode: queue` + IP LAN                     |
-| NFS mount falha       | Export ou firewall                   | `showmount -e`, ufw porta 2049             |
-| Fila cheia, nada roda | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
+| Sintoma                                 | Causa provável                       | Ação                                       |
+| --------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| PVC `Pending`, `VolumeMismatch`         | Arquivo sem `storageClassName` ou K3s usou `local-path` | `grep storageClassName` no servidor; recriar PV+PVC (Passo 11) |
+| Pod painel `Pending`, PVC não bound     | PVC sem bind ao PV NFS               | `kubectl describe pvc`; recriar claim (Passo 11) |
+| `ImagePullBackOff` no painel            | Registry inacessível ou imagem errada | Conferir `PC1_IP:5000`, `registries.yaml`; imagem não pode ser `CHANGE_ME_REGISTRY` |
+| `_catalog` vazio após push              | Push falhou ou registry parado       | Ver saída do `docker push`; Passo 9.1      |
+| `HTTP response to HTTPS client` no push | Falta `insecure-registries`          | Passo 9.1 (`/etc/docker/daemon.json`)      |
+| Pod worker não sobe                     | Sem GPU node no cluster              | Adicionar GPU node                         |
+| Play não enfileira                      | `mode: local` ou URL RabbitMQ errada | `mode: queue` + IP LAN (`app-config.yaml`) |
+| NFS mount falha                         | Export ou firewall                   | `showmount -e`, ufw porta 2049             |
+| Fila cheia, nada roda                   | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
 
 
 Quando o GPU node estiver pronto, o fluxo completo fica:

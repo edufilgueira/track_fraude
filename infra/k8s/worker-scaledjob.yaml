@@ -26,11 +26,13 @@ spec:
         restartPolicy: Never
         containers:
           - name: worker
-            image: CHANGE_ME_REGISTRY:5000/track-fraude-worker:latest
+            image: 192.168.0.199:5000/track-fraude-worker:latest
             imagePullPolicy: Always
             command:
               - python
               - jobs/run_pipeline_queue_worker.py
+            # URL do RabbitMQ vem do Secret (app-config.yaml → rabbitmq-url).
+            # Não coloque o IP aqui; edite só infra/k8s/app-config.yaml (Passo 10.4).
             env:
               - name: PIPELINE_QUEUE_URL
                 valueFrom:

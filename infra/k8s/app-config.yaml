@@ -5,9 +5,9 @@ metadata:
   namespace: track-fraude
 type: Opaque
 stringData:
-  secret-key: CHANGE_ME_RANDOM_SECRET
-  rabbitmq-url: amqp://track_fraude:track_fraude@rabbitmq.track-fraude.svc.cluster.local:5672/%2F
-  postgres-url: postgresql://track_fraude:track_fraude@postgres.track-fraude.svc.cluster.local:5432/track_fraude
+  secret-key: 85b85c880b4298d3758f23bae369dcbd07eb69e82da188d37ef09a669a18938f
+  rabbitmq-url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
+  postgres-url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -20,7 +20,7 @@ data:
       name: track_fraude
       host: 0.0.0.0
       port: 8080
-      secret_key: CHANGE_ME_RANDOM_SECRET
+      secret_key: 85b85c880b4298d3758f23bae369dcbd07eb69e82da188d37ef09a669a18938f
 
     database:
       path: /app/data/track_fraude.db
@@ -33,5 +33,5 @@ data:
     pipeline:
       mode: queue
       python:
-      queue_url: amqp://track_fraude:track_fraude@rabbitmq.track-fraude.svc.cluster.local:5672/%2F
+      queue_url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
       queue_name: track-fraude-pipelines

@@ -57,6 +57,8 @@ Edite os placeholders `CHANGE_ME_*` em `infra/k8s/*.yaml`, especialmente:
 - IP e caminho do NAS em `data-nfs-pvc.yaml`.
 - Host do registry nas imagens do server/worker.
 - `secret_key`, usuários e senhas.
+- Em `app-config.yaml`, `rabbitmq-url` e `queue_url` com o IP do control plane (`PC1_IP:5672`) quando RabbitMQ roda via `docker-compose` no host — **não** use `rabbitmq.track-fraude.svc.cluster.local` nesse cenário.
+- `worker-scaledjob.yaml` não precisa da URL do RabbitMQ; o worker lê `rabbitmq-url` do Secret via `secretKeyRef`.
 
 Depois:
 
@@ -71,7 +73,8 @@ O arquivo `server/config/settings.yaml` agora aceita:
 ```yaml
 pipeline:
   mode: queue
-  queue_url: amqp://track_fraude:track_fraude@rabbitmq.track-fraude.svc.cluster.local:5672/%2F
+  # Com docker-compose no host: use o IP do control plane, não cluster.local
+  queue_url: amqp://track_fraude:track_fraude@<PC1_IP>:5672/%2F
   queue_name: track-fraude-pipelines
 ```
 
