@@ -8,6 +8,7 @@ stringData:
   secret-key: 85b85c880b4298d3758f23bae369dcbd07eb69e82da188d37ef09a669a18938f
   rabbitmq-url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
   postgres-url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+  atlas-api-key: atlas-dev-internal-key
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -34,5 +35,7 @@ data:
     pipeline:
       mode: queue
       python:
-      queue_url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
-      queue_name: track-fraude-pipelines
+
+    atlas:
+      api_url: http://atlas-platform-api:8090
+      api_key: atlas-dev-internal-key

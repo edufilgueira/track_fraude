@@ -208,6 +208,18 @@ class PipelineRunRepository:
             )
             conn.commit()
 
+    def set_job_id(self, run_id: int, job_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE pipeline_runs
+                SET job_id = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (job_id.strip(), run_id),
+            )
+            conn.commit()
+
     def get_running_for_store(self, store_db_id: int) -> PipelineRunRecord | None:
         for run in self.list_running():
             if run.store_db_id == store_db_id:

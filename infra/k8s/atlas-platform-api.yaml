@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-platform-api
+  namespace: track-fraude
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlas-platform-api
+  template:
+    metadata:
+      labels:
+        app: atlas-platform-api
+    spec:
+      containers:
+        - name: api
+          image: 192.168.0.199:5000/atlas-platform-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8090
+          env:
+            - name: ATLAS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: track-fraude-secrets
+                  key: postgres-url
+            - name: ATLAS_RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: track-fraude-secrets
+                  key: rabbitmq-url
+            - name: ATLAS_REQUIRE_API_KEY
+              value: "true"
+            - name: ATLAS_HOST
+              value: 0.0.0.0
+            - name: ATLAS_PORT
+              value: "8090"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-platform-api
+  namespace: track-fraude
+spec:
+  selector:
+    app: atlas-platform-api
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+      nodePort: 30090
+  type: NodePort

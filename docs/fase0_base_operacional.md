@@ -125,6 +125,14 @@ kubectl get jobs -n track-fraude -w
 # Job deve completar mesmo com UI offline
 ```
 
+**Vídeos raw no Play:** o painel lista pastas `YYYY-MM-DD` em `/app/data/raw/{grupo}/{loja}/` (NFS em `/srv/track_fraude/data/raw/...` no host). Se o Play disser “Nenhuma data importada”, confira no pod:
+
+```bash
+kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01
+```
+
+Detalhes e rsync: [config_control_plane.md](config_control_plane.md) — Passo 2.
+
 ---
 
 ## Verificação automatizada
@@ -157,4 +165,4 @@ Se a fila `track-fraude-pipelines` ainda não existir, o script **declara automa
 
 ## Próximo passo
 
-[Fase 1](../plano_execucao.md) — schema `atlas.*` + Platform API mínima.
+[Fase 1](fase1_atlas_fundacao.md) — schema `atlas.*` + Platform API mínima.

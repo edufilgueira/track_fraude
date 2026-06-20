@@ -5,7 +5,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from server.settings import PROJECT_ROOT
+from server.settings import get_data_root
 
 _DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -16,8 +16,7 @@ def _normalize_group_code(group_code: str | None) -> str:
 
 def raw_store_dir(*, group_code: str | None, store_id: str) -> Path:
     return (
-        PROJECT_ROOT
-        / "data"
+        get_data_root()
         / "raw"
         / _normalize_group_code(group_code)
         / store_id.strip()
@@ -96,14 +95,32 @@ def copy_raw_video(
 
 
 def list_raw_import_dates(*, group_code: str | None, store_id: str) -> list[str]:
+    return raw_store_dir_status(group_code=group_code, store_id=store_id)["dates"]
+
+
+def raw_store_dir_status(*, group_code: str | None, store_id: str) -> dict:
     store_dir = raw_store_dir(group_code=group_code, store_id=store_id)
     if not store_dir.is_dir():
-        return []
+        return {
+            "store_dir_exists": False,
+            "data_root": get_data_root().as_posix(),
+            "entries": [],
+            "dates": [],
+        }
+
+    entries: list[dict[str, str | bool]] = []
     dates: list[str] = []
-    for child in store_dir.iterdir():
+    for child in sorted(store_dir.iterdir(), key=lambda item: item.name):
+        entries.append({"name": child.name, "is_dir": child.is_dir()})
         if child.is_dir() and _DATE_DIR_RE.match(child.name):
             dates.append(child.name)
-    return sorted(dates, reverse=True)
+
+    return {
+        "store_dir_exists": True,
+        "data_root": get_data_root().as_posix(),
+        "entries": entries,
+        "dates": sorted(dates, reverse=True),
+    }
 
 
 def format_date_br(iso_date: str) -> str:

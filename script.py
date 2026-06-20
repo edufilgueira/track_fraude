@@ -555,8 +555,8 @@ class NVRClient:
             r = self.session.get(
                 f"{self.base}/cgi-bin/mediaFileFind.cgi",
                 params={
-                    "action": "findNextFile",
-                    "object": obj,
+    "action": "findNextFile",
+    "object": obj,
                     "count": FIND_PAGE_SIZE,
                 },
                 timeout=60,

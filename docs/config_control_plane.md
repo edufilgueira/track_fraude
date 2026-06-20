@@ -258,6 +258,20 @@ ls -la /srv/track_fraude/data
 
 > Se você já tem vídeos/SQLite em outra máquina, copie para `/srv/track_fraude/data/` antes de subir o painel.
 
+**No K8s**, o painel e o worker montam **`/srv/track_fraude/data`** como `/app/data` dentro do pod. Arquivos colocados só em `~/track_fraude/data/` **não** aparecem no painel — use sempre o export NFS:
+
+```text
+/srv/track_fraude/data/raw/{grupo}/{loja}/{YYYY-MM-DD}/cam1.mp4
+```
+
+Exemplo: `/srv/track_fraude/data/raw/default/LOJA-01/2026-05-22/cam1.mp4`
+
+Se os vídeos estiverem no clone do repo, sincronize:
+
+```bash
+rsync -av ~/track_fraude/data/raw/ /srv/track_fraude/data/raw/
+```
+
 ---
 
 ## Passo 3 — Clonar o projeto
@@ -929,6 +943,7 @@ Capacidade:
 | `HTTP response to HTTPS client` no push | Falta `insecure-registries`          | Passo 9.1 (`/etc/docker/daemon.json`)      |
 | Pod worker não sobe                     | Sem GPU node no cluster              | [config_node.md](config_node.md)           |
 | Play não enfileira                      | `mode: local` ou URL RabbitMQ errada | `mode: queue` + IP LAN (`app-config.yaml`) |
+| Play: “Nenhuma data importada”          | Vídeos fora do export NFS ou pod sem ver o mount | Copiar para `/srv/track_fraude/data/raw/...`; `kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01` |
 | NFS mount falha                         | Export ou firewall                   | `showmount -e`, ufw porta 2049             |
 | Fila cheia, nada roda                   | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
 

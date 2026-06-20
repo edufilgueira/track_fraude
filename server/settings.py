@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,14 @@ from track_fraude_core.db.database import DatabaseConfig
 SERVER_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SERVER_DIR.parent
 DEFAULT_SETTINGS_PATH = SERVER_DIR / "config" / "settings.yaml"
+
+
+def get_data_root() -> Path:
+    """Raiz de data/ (raw, processed, logs). Override via TRACK_FRAUDE_DATA_ROOT."""
+    env = os.getenv("TRACK_FRAUDE_DATA_ROOT", "").strip()
+    if env:
+        return Path(env).resolve()
+    return (PROJECT_ROOT / "data").resolve()
 
 
 @dataclass(frozen=True)
@@ -29,6 +38,8 @@ class ServerSettings:
     pipeline_python: Path | None = None
     queue_url: str | None = None
     queue_name: str = "track-fraude-pipelines"
+    atlas_api_url: str | None = None
+    atlas_api_key: str | None = None
 
     @property
     def database_path(self) -> Path:
@@ -62,6 +73,7 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
     )
 
     pipeline_cfg = raw.get("pipeline", {})
+    atlas_cfg = raw.get("atlas", {})
     pipeline_mode = str(pipeline_cfg.get("mode", "local")).strip().lower()
     pipeline_python_raw = pipeline_cfg.get("python")
     pipeline_python: Path | None = None
@@ -83,6 +95,8 @@ def load_settings(path: Path | str | None = None) -> ServerSettings:
         pipeline_python=pipeline_python,
         queue_url=pipeline_cfg.get("queue_url"),
         queue_name=str(pipeline_cfg.get("queue_name", "track-fraude-pipelines")),
+        atlas_api_url=atlas_cfg.get("api_url") or pipeline_cfg.get("atlas_api_url"),
+        atlas_api_key=atlas_cfg.get("api_key") or pipeline_cfg.get("atlas_api_key"),
     )
 
 

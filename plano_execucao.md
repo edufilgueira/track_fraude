@@ -806,7 +806,8 @@ Fase 7  Split repos (se necessário)
 
 ## 9. Próximo passo imediato (Fase 1)
 
-1. Criar `infra/postgres/schema_atlas.sql`
-2. Esqueleto `atlas/platform/` com API mínima
-3. Seed workload `track-fraude`
-4. Adaptar track-fraude-ui para enfileirar via Platform API
+Guia: [docs/fase1_atlas_fundacao.md](docs/fase1_atlas_fundacao.md)
+
+1. `python tools/apply_atlas_schema.py`
+2. Build/push `atlas-platform-api` + atualizar painel
+3. Play → Platform API → fila → worker

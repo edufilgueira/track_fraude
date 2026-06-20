@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from server.dependencies import get_pipeline_run_repo, get_settings
+from server.services.atlas_client import AtlasPlatformClient, AtlasPlatformError
 from server.services.pipeline_queue import PipelineQueuePublisher
 from server.services.video_storage import format_date_br, list_raw_import_dates
 from server.services.worker_python import resolve_worker_python
@@ -196,9 +197,6 @@ def start_daily_pipeline(
 
     settings = get_settings()
     if settings.pipeline_mode == "queue":
-        if not settings.queue_url:
-            raise RuntimeError("pipeline.queue_url deve ser configurado para pipeline.mode=queue")
-
         log_file_path = _log_path(project_root, store_db_id, date)
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         run_id = repo.enqueue_run(
@@ -217,18 +215,41 @@ def start_daily_pipeline(
         )
 
         try:
-            result = PipelineQueuePublisher(
-                queue_url=settings.queue_url,
-                queue_name=settings.queue_name,
-            ).publish(message)
+            if settings.atlas_api_url:
+                atlas_result = AtlasPlatformClient(
+                    api_url=settings.atlas_api_url,
+                    api_key=settings.atlas_api_key,
+                ).create_job(workload="track-fraude", message=message)
+                queue_name = settings.queue_name
+                message_id = str(
+                    atlas_result.get("rabbit_message_id")
+                    or f"atlas-{atlas_result.get('id')}"
+                )
+            else:
+                if not settings.queue_url:
+                    repo.cancel_run(run_id)
+                    raise RuntimeError(
+                        "Configure atlas.api_url ou pipeline.queue_url para pipeline.mode=queue"
+                    )
+                result = PipelineQueuePublisher(
+                    queue_url=settings.queue_url,
+                    queue_name=settings.queue_name,
+                ).publish(message)
+                queue_name = result.queue_name
+                message_id = result.message_id
+        except AtlasPlatformError as exc:
+            repo.cancel_run(run_id)
+            raise RuntimeError(str(exc)) from exc
         except Exception as exc:
             repo.cancel_run(run_id)
             raise RuntimeError(f"Falha ao publicar pipeline na fila: {exc}") from exc
 
         with log_file_path.open("a", encoding="utf-8") as log_handle:
             log_handle.write(f"\n--- pipeline enfileirado {datetime.now().isoformat()} ---\n")
-            log_handle.write(f"queue: {result.queue_name}\n")
-            log_handle.write(f"message_id: {result.message_id}\n")
+            if settings.atlas_api_url:
+                log_handle.write(f"atlas_job: {atlas_result.get('id')}\n")
+            log_handle.write(f"queue: {queue_name}\n")
+            log_handle.write(f"message_id: {message_id}\n")
             log_handle.flush()
 
         with _lock:

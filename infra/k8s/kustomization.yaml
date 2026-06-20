@@ -3,6 +3,7 @@ resources:
   - data-nfs-pvc.yaml
   - app-config.yaml
   - control-plane-services.yaml
+  - atlas-platform-api.yaml
   - server-deployment.yaml
   - worker-scaledjob.yaml
   - nvidia-device-plugin.yaml

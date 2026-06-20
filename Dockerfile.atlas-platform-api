@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    PYTHONUTF8=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY core ./core
+COPY atlas ./atlas
+COPY infra/postgres ./infra/postgres
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -e ./core \
+    && python -m pip install -r atlas/platform/requirements.txt
+
+EXPOSE 8090
+
+CMD ["python", "-m", "atlas.platform.main", "--host", "0.0.0.0", "--port", "8090"]
