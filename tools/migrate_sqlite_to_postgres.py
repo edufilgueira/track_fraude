@@ -19,6 +19,21 @@ TABLES = (
 )
 
 
+def _pg_columns(pg_conn, table: str) -> list[str]:
+    with pg_conn.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            ORDER BY ordinal_position
+            """,
+            (table,),
+        )
+        return [str(row[0]) for row in cursor.fetchall()]
+
+
 def _pg_boolean_columns(pg_conn, table: str) -> set[str]:
     with pg_conn.cursor() as cursor:
         cursor.execute(
@@ -50,7 +65,15 @@ def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
 
 
 def _copy_table(sqlite_conn: sqlite3.Connection, pg_conn, table: str) -> int:
-    columns = _columns(sqlite_conn, table)
+    sqlite_columns = _columns(sqlite_conn, table)
+    if not sqlite_columns:
+        return 0
+
+    pg_column_set = set(_pg_columns(pg_conn, table))
+    columns = [column for column in sqlite_columns if column in pg_column_set]
+    skipped = [column for column in sqlite_columns if column not in pg_column_set]
+    if skipped:
+        print(f"  skip {table}: colunas só no SQLite → {', '.join(skipped)}")
     if not columns:
         return 0
 
