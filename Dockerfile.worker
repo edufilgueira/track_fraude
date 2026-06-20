@@ -19,6 +19,7 @@ RUN apt-get update \
 COPY core ./core
 COPY src ./src
 COPY jobs ./jobs
+COPY infra/postgres ./infra/postgres
 COPY pyproject.toml README.md ./
 
 RUN python -m pip install --upgrade pip \

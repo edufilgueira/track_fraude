@@ -15,6 +15,7 @@ RUN apt-get update \
 
 COPY core ./core
 COPY server ./server
+COPY infra/postgres ./infra/postgres
 COPY README.md ./
 
 WORKDIR /app/server
