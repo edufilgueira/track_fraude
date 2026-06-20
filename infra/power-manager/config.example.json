@@ -6,6 +6,7 @@
   "worker_label_selector": "scaledjob.keda.sh/name=track-fraude-worker",
   "poll_interval_sec": 30,
   "idle_shutdown_after_sec": 900,
+  "state_file": "power_state.json",
   "nodes": [
     {
       "name": "gpu-node-01",

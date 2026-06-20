@@ -22,8 +22,8 @@ docker push <control-plane>:5000/track-fraude-server:latest
 docker push <control-plane>:5000/track-fraude-worker:latest
 ```
 
-Em cada nó K3s, configure `/etc/rancher/k3s/registries.yaml` com base em
-`infra/k3s/registries.yaml.example` e reinicie o K3s.
+Em cada nó GPU, siga [docs/config_node.md](../docs/config_node.md). Configure `/etc/rancher/k3s/registries.yaml` com base em
+`infra/k3s/registries.yaml.example` e reinicie o K3s agent.
 
 ## 3. Nós GPU
 
@@ -101,4 +101,4 @@ Configure `infra/power-manager/config.example.json` com os nós GPU reais e exec
 python infra/power-manager/power_manager.py --config infra/power-manager/config.example.json
 ```
 
-O gerenciador acorda um nó via Wake-on-LAN quando há mensagens na fila e desliga nós prontos sem pods ativos após `idle_shutdown_after_sec`.
+O gerenciador acorda um nó via Wake-on-LAN quando há mensagens na fila e desliga nós prontos sem pods ativos após `idle_shutdown_after_sec`. Nodes são escolhidos por `total_on_sec` (menor para ligar, maior para desligar); o estado fica em `power_state.json`.

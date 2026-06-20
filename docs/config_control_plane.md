@@ -10,6 +10,8 @@ Neste cenário inicial:
 
 **Sistema alvo:** Ubuntu Server (somente terminal, sem interface gráfica).
 
+> **Onde editar os arquivos?** Os passos 10 e 11 assumem que você edita e aplica os manifests **no próprio `ctrlp01`** (`~/track_fraude`). Se você editar no Windows (ou outro PC), precisa **sincronizar** antes do `kubectl apply` — veja [Sincronizar alterações no servidor](#sincronizar-alterações-no-servidor).
+
 ---
 
 ## O que este PC faz
@@ -39,6 +41,7 @@ Preencha estes valores (anote num papel ou arquivo):
 | -------------------- | ---------------------- | -------------- |
 | `PC1_IP`             | `192.168.0.199`        | ______________ |
 | `PC1_HOSTNAME`       | `ctrl_p01`             | ______________ |
+| `PC1_DNS`            | `ctrl-p01`             | ______________ |
 | `USUARIO`            | `ubuntu`               | ______________ |
 | `SENHA_ADMIN_PAINEL` | troque em produção     | ______________ |
 | `SECRET_KEY`         | string aleatória longa | ______________ |
@@ -127,6 +130,80 @@ sudo netplan apply
 
 ---
 
+## Passo 0.1 — Nomes locais (DNS / hosts)
+
+Use **nomes estáveis** na LAN para SSH, navegador e `scp`, em vez de decorar IPs.
+
+| Nome (SSH / browser) | IP fixo | Hostname sistema | Nome no K3s |
+| -------------------- | ------- | ---------------- | ----------- |
+| `ctrl-p01`           | `192.168.0.199` | `ctrl_p01` | `ctrlp01` |
+| `node-01`            | `192.168.0.201` | `node_01`  | `node_01` |
+| `node-02`            | `192.168.0.202` | `node_02`  | `node_02` |
+| `node-03`            | `192.168.0.203` | `node_03`  | `node_03` |
+
+> O **nome DNS** (`ctrl-p01`, `node-01`) pode usar hífen. O **hostname** do Linux e o **node K3s** usam underscore (`node_01`) — são coisas diferentes.
+
+### Opção A — `/etc/hosts` (recomendado para começar)
+
+No **ctrl-p01** (e repita no notebook e em cada GPU node):
+
+```bash
+sudo tee -a /etc/hosts >/dev/null <<'EOF'
+192.168.0.199   ctrl-p01 ctrlp01
+192.168.0.201   node-01 node01
+192.168.0.202   node-02 node02
+192.168.0.203   node-03 node03
+EOF
+```
+
+Teste:
+
+```bash
+ping -c1 ctrl-p01
+ping -c1 node-01
+ssh ${USUARIO}@node-01
+```
+
+Painel no navegador (de outro PC na rede, com o mesmo `/etc/hosts` ou DNS):
+
+```text
+http://ctrl-p01:30080/login
+```
+
+### Opção B — DNS central com `dnsmasq` no ctrl-p01 (opcional)
+
+Se quiser que **toda a LAN** resolva nomes sem editar cada PC:
+
+```bash
+sudo apt install -y dnsmasq
+sudo tee /etc/dnsmasq.d/track-fraude.conf >/dev/null <<'EOF'
+address=/ctrl-p01/192.168.0.199
+address=/node-01/192.168.0.201
+address=/node-02/192.168.0.202
+address=/node-03/192.168.0.203
+EOF
+sudo systemctl restart dnsmasq
+```
+
+No roteador, configure o DHCP para apontar **DNS primário = `192.168.0.199`**.
+
+### O que continua com IP nos manifests
+
+Os YAMLs do Kubernetes (`app-config.yaml`, NFS, registry) **podem manter IP** (`192.168.0.199`) — pods do K3s resolvem melhor assim. Nomes locais são para **operação humana** (SSH, browser, Power Manager `ssh_host`).
+
+Exemplo Power Manager:
+
+```json
+"ssh_host": "node-01"
+```
+
+em vez de `"192.168.0.201"`.
+
+- `ping ctrl-p01` e `ping node-01` funcionam
+- `ssh usuario@ctrl-p01` funciona
+
+---
+
 ## Passo 1 — Usuário e firewall
 
 ```bash
@@ -192,6 +269,48 @@ cd track_fraude
 Se o repositório for privado ou estiver em pendrive, copie a pasta `track_fraude/` para `~/track_fraude`.
 
 - Pasta `~/track_fraude` existe com `Dockerfile.server`, `docker-compose.infra.yml`, `infra/`
+
+---
+
+## Sincronizar alterações no servidor
+
+O `kubectl apply` lê os YAMLs **do disco do `ctrlp01`**, não do seu notebook. Se você editou manifests em outro lugar e não sincronizou, o cluster recebe a versão antiga (sintoma típico: `grep storageClassName` vazio, `CHANGE_ME_REGISTRY` no pod, PVC com `local-path`).
+
+**Opção A — editar direto no servidor (mais simples)**
+
+```bash
+ssh eduardo@192.168.0.199
+cd ~/track_fraude
+nano infra/k8s/data-nfs-pvc.yaml   # etc.
+```
+
+**Opção B — editar no Windows e enviar via git**
+
+```bash
+# No Windows (após commit)
+git push
+
+# No ctrlp01 (antes dos passos 10.5 e 11)
+cd ~/track_fraude
+git pull
+```
+
+**Opção C — copiar arquivos com `scp` (sem git)**
+
+```powershell
+# No Windows (PowerShell) — ajuste usuário e IP
+scp infra/k8s/data-nfs-pvc.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/server-deployment.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/worker-scaledjob.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/app-config.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+```
+
+Confirme no servidor **antes** de cada `kubectl apply`:
+
+```bash
+grep -c storageClassName infra/k8s/data-nfs-pvc.yaml   # deve ser 2
+grep image infra/k8s/server-deployment.yaml            # deve ter PC1_IP:5000
+```
 
 ---
 
@@ -392,7 +511,7 @@ O `_catalog` deve listar `track-fraude-server` e `track-fraude-worker`.
 
 ## Passo 10 — Preparar manifests Kubernetes
 
-Edite os placeholders antes de aplicar.
+Edite os placeholders **no `ctrlp01`** (ou sincronize do seu PC — seção [Sincronizar alterações no servidor](#sincronizar-alterações-no-servidor)) antes de aplicar.
 
 ### 10.1 NFS (`infra/k8s/data-nfs-pvc.yaml`)
 
@@ -471,11 +590,14 @@ Checklist de edição:
 cd ~/track_fraude
 PC1_IP=192.168.0.199   # ajuste
 
+grep -c storageClassName infra/k8s/data-nfs-pvc.yaml    # deve imprimir 2
 grep -nE 'CHANGE_ME|cluster\.local' infra/k8s/*.yaml || echo "OK: sem placeholders óbvios"
 grep -n 'image:' infra/k8s/server-deployment.yaml infra/k8s/worker-scaledjob.yaml
 grep -nE 'server:|path:|storageClassName' infra/k8s/data-nfs-pvc.yaml
 grep -nE 'rabbitmq-url|queue_url' infra/k8s/app-config.yaml
 ```
+
+Se `grep -c storageClassName` imprimir `0`, **pare** — sincronize os arquivos antes de continuar.
 
 Esperado:
 
@@ -488,7 +610,7 @@ Esperado:
 
 ## Passo 11 — Aplicar manifests no cluster
 
-Confirme o **Passo 10.5** antes de continuar. Aplique **somente depois** de editar os YAMLs no disco — o `kubectl apply` usa os arquivos locais, não o que está só no seu PC de desenvolvimento.
+Confirme o **Passo 10.5** antes de continuar. Aplique **somente depois** de editar ou sincronizar os YAMLs no disco do `ctrlp01` — o `kubectl apply` não enxerga arquivos que existem só no seu PC de desenvolvimento.
 
 Confirme também que a infra Docker está no ar:
 
@@ -528,8 +650,10 @@ kubectl get scaledjob -n track-fraude
 Painel via Kubernetes:
 
 ```text
-http://PC1_IP:30080/login
+http://ctrl-p01:30080/login
 ```
+
+(ou `http://PC1_IP:30080/login` se não configurou DNS local)
 
 Se o PVC ficou `Pending` com `storageClassName does not match`:
 
@@ -631,11 +755,26 @@ python tools/migrate_sqlite_to_postgres.py \
 
 Só configure depois que existir pelo menos **1 GPU node** com Wake-on-LAN ou SSH.
 
+O Power Manager balanceia **tempo ligado** entre os nodes (`total_on_sec`):
+
+- **Ligar:** escolhe o node **offline** com **menor** `total_on_sec`
+- **Desligar:** escolhe o node **ocioso** com **maior** `total_on_sec` (após `idle_shutdown_after_sec`)
+- **Estado:** persiste em `infra/power-manager/power_state.json` (configurável via `state_file`)
+
+Acorda node extra quando a fila tem mensagens e não há GPU livre (`free_gpus == 0`), há pods `Pending`, ou `mensagens > GPUs livres`.
+
 ```bash
 cd ~/track_fraude
 cp infra/power-manager/config.example.json infra/power-manager/config.json
-# Edite MAC, IP, nome do node
+# Edite MAC, IP, nome do node (name deve bater com kubectl get nodes)
 python3 infra/power-manager/power_manager.py --config infra/power-manager/config.json
+```
+
+Logs esperados:
+
+```text
+wake node_03: queue=2 free_gpus=0 pending_workers=1 total_on_sec=3600
+shutdown node_01: idle_for=900s total_on_sec=86400
 ```
 
 Para systemd (sempre ligado no PC1):
@@ -705,8 +844,11 @@ Checklist manual:
 
 ## O que ainda falta (próximo PC — GPU node)
 
-Este guia **não** processa vídeo sozinho. Falta **1 GPU node** mínimo:
+Este guia **não** processa vídeo sozinho. Para adicionar o primeiro GPU node, siga o guia dedicado:
 
+**[docs/config_node.md](config_node.md)** — passo a passo para `node_01` (K3s agent + NVIDIA + NFS).
+
+Resumo do que o GPU node precisa:
 
 | Item                                       | GPU node |
 | ------------------------------------------ | -------- |
@@ -714,8 +856,8 @@ Este guia **não** processa vídeo sozinho. Falta **1 GPU node** mínimo:
 | Driver NVIDIA + `nvidia-smi`               | Sim      |
 | NVIDIA Container Toolkit                   | Sim      |
 | K3s **agent** apontando para `PC1_IP`      | Sim      |
-| Montar NFS `PC1_IP:/srv/track_fraude/data` | Sim      |
-| Registry `PC1_IP:5000` em registries.yaml  | Sim      |
+| Acesso ao NFS `PC1_IP:/srv/track_fraude/data` | Sim   |
+| Registry `PC1_IP:5000` em `registries.yaml` | Sim   |
 
 
 Quando o GPU node entrar no cluster:
@@ -736,20 +878,22 @@ Capacidade:
 ## Resumo — ordem de instalação
 
 1. [ ] Ubuntu + IP fixo + firewall
-2. [ ] Storage `/srv/track_fraude/data` + NFS
-3. [ ] Clone do repo
-4. [ ] Docker + Compose (registry, rabbitmq, postgres)
-5. [ ] K3s server
-6. [ ] Registry no K3s
-7. [ ] KEDA
-8. [ ] `insecure-registries` no Docker (`daemon.json`)
-9. [ ] Build/push imagens
-10. [ ] Editar manifests (`PC1_IP`, NFS, secrets, RabbitMQ)
-11. [ ] Conferir YAMLs com `grep` (Passo 10.5)
-12. [ ] `kubectl apply` namespace, nfs, app, server, worker
-13. [ ] Painel `mode: queue`
-14. [ ] Validar serviços
-15. [ ] Adicionar GPU node (próximo guia)
+2. [ ] Nomes locais (`/etc/hosts` ou dnsmasq)
+3. [ ] Storage `/srv/track_fraude/data` + NFS
+4. [ ] Clone do repo
+5. [ ] Docker + Compose (registry, rabbitmq, postgres)
+6. [ ] K3s server
+7. [ ] Registry no K3s
+8. [ ] KEDA
+9. [ ] `insecure-registries` no Docker (`daemon.json`)
+10. [ ] Build/push imagens
+11. [ ] Editar manifests (`PC1_IP`, NFS, secrets, RabbitMQ)
+12. [ ] Sincronizar no `ctrlp01` (`git pull` ou `scp`) se editou em outro PC
+13. [ ] Conferir YAMLs com `grep` (Passo 10.5)
+14. [ ] `kubectl apply` namespace, nfs, app, server, worker
+15. [ ] Painel `mode: queue`
+16. [ ] Validar serviços
+17. [ ] Adicionar GPU node — [config_node.md](config_node.md)
 
 ---
 
@@ -760,6 +904,7 @@ Capacidade:
 | ---------------------------------------- | ----------------------------------- |
 | `docker-compose.infra.yml`               | Registry, RabbitMQ, Postgres no PC1 |
 | `infra/k8s/`                             | Manifests K3s/KEDA                  |
+| `docs/config_node.md`                    | Setup GPU node (`node_01`)          |
 | `infra/k3s/registries.yaml.example`      | Modelo registry                     |
 | `infra/power-manager/`                   | Liga/desliga GPU nodes              |
 | `docs/arquitetura_serverless_on_prem.md` | Visão geral da arquitetura          |
@@ -773,12 +918,14 @@ Capacidade:
 
 | Sintoma                                 | Causa provável                       | Ação                                       |
 | --------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| YAMLs corretos no Windows, cluster errado | Alterações não sincronizadas no servidor | `git pull` ou `scp` no `ctrlp01`; Passo 10.5 |
 | PVC `Pending`, `VolumeMismatch`         | Arquivo sem `storageClassName` ou K3s usou `local-path` | `grep storageClassName` no servidor; recriar PV+PVC (Passo 11) |
 | Pod painel `Pending`, PVC não bound     | PVC sem bind ao PV NFS               | `kubectl describe pvc`; recriar claim (Passo 11) |
+| `:30080` não abre de outro PC           | Pod não `Running` ou firewall        | `kubectl get pods`; `sudo ufw allow 30080/tcp` |
 | `ImagePullBackOff` no painel            | Registry inacessível ou imagem errada | Conferir `PC1_IP:5000`, `registries.yaml`; imagem não pode ser `CHANGE_ME_REGISTRY` |
 | `_catalog` vazio após push              | Push falhou ou registry parado       | Ver saída do `docker push`; Passo 9.1      |
 | `HTTP response to HTTPS client` no push | Falta `insecure-registries`          | Passo 9.1 (`/etc/docker/daemon.json`)      |
-| Pod worker não sobe                     | Sem GPU node no cluster              | Adicionar GPU node                         |
+| Pod worker não sobe                     | Sem GPU node no cluster              | [config_node.md](config_node.md)           |
 | Play não enfileira                      | `mode: local` ou URL RabbitMQ errada | `mode: queue` + IP LAN (`app-config.yaml`) |
 | NFS mount falha                         | Export ou firewall                   | `showmount -e`, ufw porta 2049             |
 | Fila cheia, nada roda                   | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
