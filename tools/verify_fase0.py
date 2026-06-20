@@ -99,7 +99,7 @@ def check_postgres(postgres_url: str) -> bool:
         return False
 
 
-def check_rabbitmq_management(api_url: str, user: str, password: str) -> bool:
+def _list_queue_names(api_url: str, user: str, password: str) -> set[str] | None:
     request = urllib.request.Request(api_url)
     credentials = f"{user}:{password}".encode("utf-8")
     import base64
@@ -108,15 +108,60 @@ def check_rabbitmq_management(api_url: str, user: str, password: str) -> bool:
     try:
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        _fail(f"RabbitMQ management API inacessível: {exc}")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+    return {str(item.get("name")) for item in payload if isinstance(item, dict) and item.get("name")}
+
+
+def _declare_queue(rabbitmq_url: str, queue_name: str) -> bool:
+    try:
+        import pika
+    except ImportError:
+        _fail("pika não instalado — pip install pika (para declarar fila)")
+        return False
+    try:
+        connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
+        channel = connection.channel()
+        channel.queue_declare(queue=queue_name, durable=True)
+        connection.close()
+        return True
+    except Exception as exc:
+        _fail(f"Não foi possível declarar fila {queue_name!r}: {exc}")
         return False
 
-    names = {item.get("name") for item in payload if isinstance(item, dict)}
-    if "track-fraude-pipelines" not in names:
-        _fail("Fila track-fraude-pipelines não encontrada no RabbitMQ")
+
+def check_rabbitmq_management(
+    api_url: str,
+    user: str,
+    password: str,
+    *,
+    queue_name: str,
+    rabbitmq_url: str,
+    declare_missing: bool,
+) -> bool:
+    names = _list_queue_names(api_url, user, password)
+    if names is None:
+        _fail("RabbitMQ management API inacessível")
         return False
-    _ok("RabbitMQ management API responde e fila track-fraude-pipelines existe")
+
+    if queue_name not in names:
+        if not declare_missing:
+            _fail(
+                f"Fila {queue_name!r} não encontrada no RabbitMQ "
+                "(será criada no primeiro Play ou use --declare-queue)"
+            )
+            return False
+        print(f"  ... fila {queue_name!r} ausente — declarando via AMQP")
+        if not _declare_queue(rabbitmq_url, queue_name):
+            return False
+        names = _list_queue_names(api_url, user, password)
+        if names is None or queue_name not in names:
+            _fail(f"Fila {queue_name!r} ainda não visível após queue_declare")
+            return False
+        _ok(f"Fila {queue_name!r} criada (durable) no RabbitMQ")
+        return True
+
+    _ok(f"RabbitMQ management API responde e fila {queue_name!r} existe")
     return True
 
 
@@ -132,6 +177,16 @@ def main() -> int:
     )
     parser.add_argument("--rabbitmq-user", default="track_fraude")
     parser.add_argument("--rabbitmq-password", default="track_fraude")
+    parser.add_argument(
+        "--rabbitmq-url",
+        default="amqp://track_fraude:track_fraude@127.0.0.1:5672/%2F",
+    )
+    parser.add_argument("--queue-name", default="track-fraude-pipelines")
+    parser.add_argument(
+        "--no-declare-queue",
+        action="store_true",
+        help="Não criar fila automaticamente se ainda não existir",
+    )
     parser.add_argument("--skip-live", action="store_true", help="Só valida arquivos do repo")
     args = parser.parse_args()
 
@@ -147,7 +202,12 @@ def main() -> int:
         results.append(check_postgres(args.postgres_url))
         results.append(
             check_rabbitmq_management(
-                args.rabbitmq_api, args.rabbitmq_user, args.rabbitmq_password
+                args.rabbitmq_api,
+                args.rabbitmq_user,
+                args.rabbitmq_password,
+                queue_name=args.queue_name,
+                rabbitmq_url=args.rabbitmq_url,
+                declare_missing=not args.no_declare_queue,
             )
         )
 

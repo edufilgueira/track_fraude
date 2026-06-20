@@ -143,6 +143,8 @@ python tools/verify_fase0.py \
   --rabbitmq-api http://192.168.0.199:15672/api/queues/%2F
 ```
 
+Se a fila `track-fraude-pipelines` ainda não existir, o script **declara automaticamente** via AMQP (comportamento normal antes do primeiro Play).
+
 ---
 
 ## Fora de escopo (Fase 0)
