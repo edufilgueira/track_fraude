@@ -41,6 +41,8 @@ def test_copy_table_intersects_columns(monkeypatch) -> None:
             self.last_params = params
 
         def fetchall(self):
+            if "data_type = 'boolean'" in self.last_sql:
+                return []
             if "information_schema.columns" in self.last_sql:
                 return [("id",), ("keep",)]
             return []
