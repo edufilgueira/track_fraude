@@ -113,11 +113,53 @@ def _list_queue_names(api_url: str, user: str, password: str) -> set[str] | None
     return {str(item.get("name")) for item in payload if isinstance(item, dict) and item.get("name")}
 
 
-def _declare_queue(rabbitmq_url: str, queue_name: str) -> bool:
+def _declare_queue_via_management(
+    api_url: str,
+    user: str,
+    password: str,
+    queue_name: str,
+) -> bool:
+    """Cria fila durable via HTTP API (não exige pika)."""
+    import base64
+    from urllib.parse import quote
+
+    # api_url termina em .../api/queues/%2F — montamos .../api/queues/%2F/{name}
+    base = api_url.rstrip("/")
+    if not base.endswith("%2F"):
+        base = f"{base}/%2F"
+    put_url = f"{base}/{quote(queue_name, safe='')}"
+
+    body = json.dumps({"durable": True, "auto_delete": False, "arguments": {}}).encode("utf-8")
+    request = urllib.request.Request(
+        put_url,
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    credentials = f"{user}:{password}".encode("utf-8")
+    request.add_header("Authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            response.read()
+        return True
+    except Exception as exc:
+        _fail(f"Não foi possível declarar fila {queue_name!r} via management API: {exc}")
+        return False
+
+
+def _declare_queue(
+    api_url: str,
+    user: str,
+    password: str,
+    queue_name: str,
+    rabbitmq_url: str,
+) -> bool:
+    if _declare_queue_via_management(api_url, user, password, queue_name):
+        return True
+    # Fallback AMQP se management PUT falhar e pika estiver disponível
     try:
         import pika
     except ImportError:
-        _fail("pika não instalado — pip install pika (para declarar fila)")
         return False
     try:
         connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
@@ -126,7 +168,7 @@ def _declare_queue(rabbitmq_url: str, queue_name: str) -> bool:
         connection.close()
         return True
     except Exception as exc:
-        _fail(f"Não foi possível declarar fila {queue_name!r}: {exc}")
+        _fail(f"Não foi possível declarar fila {queue_name!r} via AMQP: {exc}")
         return False
 
 
@@ -151,8 +193,10 @@ def check_rabbitmq_management(
                 "(será criada no primeiro Play ou use --declare-queue)"
             )
             return False
-        print(f"  ... fila {queue_name!r} ausente — declarando via AMQP")
-        if not _declare_queue(rabbitmq_url, queue_name):
+        print(f"  ... fila {queue_name!r} ausente — declarando via RabbitMQ management API")
+        if not _declare_queue(
+            api_url, user, password, queue_name, rabbitmq_url
+        ):
             return False
         names = _list_queue_names(api_url, user, password)
         if names is None or queue_name not in names:
