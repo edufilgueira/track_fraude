@@ -23,6 +23,9 @@ spec:
           env:
             - name: FAIL_ON_INIT_ERROR
               value: "false"
+            # "auto" falha em K3s sem CDI; nvml usa driver do host via /dev
+            - name: NVIDIA_DEVICE_DISCOVERY_STRATEGY
+              value: nvml
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -31,10 +34,14 @@ spec:
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
+            - name: dev
+              mountPath: /dev
       volumes:
         - name: device-plugin
           hostPath:
-            # Requer symlink no host (Passo 8.1 em config_node.md):
-            # /var/lib/kubelet/device-plugins -> /var/lib/rancher/k3s/agent/kubelet/device-plugins
+            # Requer symlink no host (Passo 8.1 em config_node.md)
             path: /var/lib/kubelet/device-plugins
             type: DirectoryOrCreate
+        - name: dev
+          hostPath:
+            path: /dev

@@ -649,27 +649,37 @@ Deve aparecer referência a `nvidia` na saída. Se `nvidia-ctk: command not foun
 
 ### 8.1 — Symlink device-plugins (obrigatório no K3s)
 
-O kubelet do K3s usa `/var/lib/rancher/k3s/agent/kubelet/device-plugins`, mas o NVIDIA Device Plugin espera `/var/lib/kubelet/device-plugins`. Sem o symlink, o plugin sobe o socket mas o kubelet **não registra** a GPU (`context deadline exceeded` nos logs).
+O kubelet do K3s usa `/var/lib/rancher/k3s/agent/kubelet/device-plugins`, mas o NVIDIA Device Plugin monta `/var/lib/kubelet/device-plugins`. Sem o symlink correto, o plugin falha com `context deadline exceeded` ou `No devices found`.
+
+**Importante:** se `/var/lib/kubelet/device-plugins` já existir como **pasta**, remova antes de criar o symlink (senão o `ln -s` cria um link *dentro* da pasta, errado).
 
 No **node-01**:
 
 ```bash
-sudo mkdir -p /var/lib/kubelet
+sudo rm -rf /var/lib/kubelet/device-plugins
 sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
-ls -la /var/lib/kubelet/device-plugins
+sudo ls -la /var/lib/kubelet/device-plugins
+# esperado: kubelet.sock (e depois nvidia-gpu.sock com plugin OK)
 ```
 
 No **ctrl-p01** (plugin também roda lá):
 
 ```bash
-sudo mkdir -p /var/lib/kubelet
+sudo rm -rf /var/lib/kubelet/device-plugins
 sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
+```
+
+Reinicie o agent no **node-01** se o symlink foi corrigido:
+
+```bash
+sudo systemctl restart k3s-agent
 ```
 
 Depois reaplique o device plugin **no ctrl-p01**:
 
 ```bash
 cd ~/track_fraude
+git pull
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
 ```
@@ -725,9 +735,11 @@ nvidia.com/gpu:  1
 
 ### C — Se `nvidia.com/gpu` não aparecer
 
-**Sintoma nos logs:** `Could not register device plugin: context deadline exceeded`
+**Sintoma nos logs:** `Could not register device plugin: context deadline exceeded` → symlink errado (pasta em vez de link).
 
-Causa: kubelet não encontra o socket do plugin — falta o **symlink** do Passo 8.1.
+**Sintoma nos logs:** `Incompatible strategy detected auto` / `No devices found` → reaplique o manifest com `NVIDIA_DEVICE_DISCOVERY_STRATEGY=nvml` e mount `/dev` (`git pull` + `kubectl apply`).
+
+Causa do symlink: se `/var/lib/kubelet/device-plugins` já era **pasta**, o `ln -s` criou link *dentro* dela. Corrija com [Passo 8.1](#81--symlink-device-plugins-obrigatório-no-k3s) (`rm -rf` antes do `ln -sfn`).
 
 **No node-01**, confira:
 
