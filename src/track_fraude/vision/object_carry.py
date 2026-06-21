@@ -74,7 +74,7 @@ def detect_carry_objects(
     frame,
     *,
     person_bbox: tuple[float, float, float, float] | None = None,
-    model_name: str = "yolov8n.pt",
+    model_name: str = "/app/models/yolov8n.pt",
     conf: float = 0.35,
 ) -> CarryObjectDetection:
     """Detecta objetos carregáveis com YOLO; opcionalmente filtra pela ROI da pessoa."""

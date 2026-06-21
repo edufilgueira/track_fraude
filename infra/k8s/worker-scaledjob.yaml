@@ -25,6 +25,14 @@ spec:
       spec:
         restartPolicy: Never
         runtimeClassName: nvidia
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: track-fraude/gpu
+                      operator: In
+                      values: ["true"]
         containers:
           - name: worker
             image: 192.168.0.199:5000/track-fraude-worker:latest

@@ -317,6 +317,27 @@ Depois `git pull`, rebuild worker se houve correção, `kubectl apply -f infra/k
 
 > Com 1 GPU, o ScaledJob usa `maxReplicaCount: 1` — só um worker por vez.
 
+### Play para em `pipeline enfileirado` (sem `retirado da fila`)
+
+**Sintoma:** console mostra só `atlas_job:` / `message_id: pipeline-N`, **sem** `--- pipeline retirado da fila ---`.
+
+**Causa:** mensagem na fila, mas KEDA não criou job ou pod worker Pending (GPU, runtime, node errado).
+
+```bash
+curl -s -u track_fraude:track_fraude \
+  http://127.0.0.1:15672/api/queues/%2F/track-fraude-pipelines | jq '.messages'
+kubectl get scaledjob,jobs,pods -n track-fraude -o wide
+kubectl describe node node-01 | grep -A3 nvidia.com/gpu
+kubectl describe pod -n track-fraude -l job-name 2>/dev/null | tail -25
+kubectl logs -n keda -l app=keda-operator --tail=30
+```
+
+| O que ver | Ação |
+|-----------|------|
+| `messages: 1`, sem job | Reaplique ScaledJob; confira KEDA e Secret `rabbitmq-url` |
+| job Pending `Insufficient nvidia.com/gpu` | `kubectl delete jobs -n track-fraude --all` |
+| job Pending no ctrlp01 | `kubectl apply -f infra/k8s/worker-scaledjob.yaml` (affinity GPU) |
+
 ### Play enfileirou mas nada processa
 
 Checklist:

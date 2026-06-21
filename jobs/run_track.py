@@ -38,7 +38,11 @@ def main() -> None:
     parser.add_argument("--camera", required=True, help="ID da câmera cadastrada")
     add_store_cli_args(parser, db_default=str(ROOT / "data" / "track_fraude.db"))
     parser.add_argument("--video", default=None, help="Caminho do vídeo")
-    parser.add_argument("--model", default="yolov8n.pt", help="Modelo YOLO (default: yolov8n.pt)")
+    parser.add_argument(
+        "--model",
+        default="/app/models/yolov8n.pt",
+        help="Modelo YOLO (default: pesos em /app/models no container)",
+    )
     parser.add_argument("--conf", type=float, default=0.5, help="Confiança mínima YOLO")
     parser.add_argument(
         "--tracker",

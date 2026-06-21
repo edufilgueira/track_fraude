@@ -66,7 +66,7 @@ def enrich_track_vision_signals(
     track_rows: list[dict[str, Any]] | None,
     video_path: Path | None = None,
     sync_map: SyncMap | None = None,
-    model_name: str = "yolov8n.pt",
+    model_name: str = "/app/models/yolov8n.pt",
     conf: float = 0.35,
     use_yolo: bool = True,
 ) -> dict[str, Any] | None:

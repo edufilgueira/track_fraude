@@ -27,7 +27,11 @@ def main() -> None:
     parser.add_argument("--date", required=True, help="YYYY-MM-DD")
     add_store_cli_args(parser, db_default=str(ROOT / "data" / "track_fraude.db"))
     parser.add_argument("--video", default=None, help="Caminho do vídeo cam1 (opcional)")
-    parser.add_argument("--model", default="yolov8n.pt", help="Modelo YOLO (default: yolov8n.pt)")
+    parser.add_argument(
+        "--model",
+        default="/app/models/yolov8n.pt",
+        help="Modelo YOLO (default: pesos em /app/models no container)",
+    )
     parser.add_argument("--conf", type=float, default=0.35, help="Confiança mínima YOLO")
     parser.add_argument(
         "--skip-yolo",

@@ -9,7 +9,7 @@ from track_fraude.models.sync import SyncMap
 
 @dataclass(frozen=True)
 class TrackRunConfig:
-    model_name: str = "yolov8n.pt"
+    model_name: str = "/app/models/yolov8n.pt"
     tracker: str = "bytetrack.yaml"
     vid_stride: int = 5
     conf: float = 0.5

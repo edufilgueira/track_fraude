@@ -831,6 +831,8 @@ curl -s http://${PC1_IP}:5000/v2/track-fraude-worker/tags/list
 
 > Com `database.backend: postgres` no painel, o worker precisa de `psycopg` na imagem (`pip install -e "./core[postgres]"` no `Dockerfile.worker`). Sem isso, pods falham em poucos segundos com `ModuleNotFoundError: psycopg`.
 
+> O build da imagem worker **baixa `yolov8n.pt`** em `/app/models/` (precisa de internet no **ctrl-p01** durante `docker build`). O GPU node **não** precisa de internet em runtime.
+
 ---
 
 ## Passo 10 — Teste de pipeline (Play)
@@ -1068,7 +1070,7 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 | Worker `Pending` (GPU)                            | Sem GPU alocável no cluster                | `kubectl describe node node-01`; device plugin Running; ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)         |
 | Worker `ContainerCreating` (runtime)            | Falta RuntimeClass `nvidia`                | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml`; worker usa `runtimeClassName: nvidia`                                    |
 | Worker falha ao montar volume / `showmount` trava | Firewall RPC no **ctrl-p01** (não no node) | [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes); `timeout 10 showmount -e PC1_IP` |
-| Worker `Error` (exit rápido, ~5s)                 | Imagem worker sem `psycopg` (Postgres)     | Rebuild com `Dockerfile.worker` atualizado (Passo 9.1); confira logs do pod                     |
+| Worker `Error` na fase track/vision (YOLO)        | GPU node sem internet; pesos ausentes      | Rebuild `Dockerfile.worker` (baixa `yolov8n.pt` em `/app/models` no build)                                                      |
 | Worker `Error` (schema Postgres)                  | Imagem worker antiga                       | Rebuild/push `Dockerfile.worker` (Passo 9.1)                                                                                     |
 | Job criado mas não roda no node                   | Node `NotReady` ou sem GPU livre           | `kubectl describe node`; jobs antigos ocupando GPU                                                                               |
 | ScaledJob `READY Unknown`                         | Normal sem fila ou KEDA validando          | Enfileirar job com Play; checar logs do KEDA                                                                                     |
