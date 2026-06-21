@@ -242,6 +242,56 @@ track-fraude-worker-xxxxx-yyyyy   0/1   Pending
 
 **Não é necessário** derrubar `track-fraude-server` nem `atlas-platform-api`.
 
+### Play enfileirou mas painel trava em "em execução"
+
+**Sintoma:** log mostra `atlas_job:` e `pipeline retirado da fila`, mas o console não avança; `atlas.jobs` fica `queued`; muitos jobs `Failed`/`Complete` no KEDA.
+
+**Causas comuns:**
+
+1. Vários `pipeline_runs` antigos em status `queued`/`running` (Play anterior falhou)
+2. Fila RabbitMQ com mensagens acumuladas + KEDA criando jobs demais
+3. Worker falhou no **ingest** (POS ausente, vídeo faltando) — veja logs do pod
+
+**Diagnóstico:**
+
+```bash
+# Runs ativos no Postgres (queued/running mantêm o painel "em execução")
+docker compose -f docker-compose.infra.yml exec postgres \
+  psql -U track_fraude -d track_fraude -c \
+  "SELECT id, status, date, error_message FROM pipeline_runs ORDER BY id DESC LIMIT 10;"
+
+# Log completo do worker (troque pelo pod Completed ou Error)
+kubectl logs -n track-fraude track-fraude-worker-5mkqp-ncgqx --tail=120
+
+# Log do pipeline no NFS (store_db_id da LOJA-01 — confira com SELECT id FROM stores WHERE store_id='LOJA-01')
+ls -lt /srv/track_fraude/data/logs/pipeline_*_2026-05-22*.log | head -3
+tail -80 /srv/track_fraude/data/logs/pipeline_<STORE_DB_ID>_2026-05-22_*.log
+```
+
+**Recuperação (ctrl-p01):**
+
+```bash
+kubectl delete jobs -n track-fraude --all
+
+# Cancelar runs presos (ajuste IDs conforme o SELECT acima)
+docker compose -f docker-compose.infra.yml exec postgres \
+  psql -U track_fraude -d track_fraude -c \
+  "UPDATE pipeline_runs SET status='failed', error_message='cancelled manual', finished_at=now(), updated_at=now() WHERE status IN ('queued','running');"
+
+docker compose -f docker-compose.infra.yml exec postgres \
+  psql -U track_fraude -d track_fraude -c \
+  "UPDATE atlas.jobs SET status='failed', error_message='cancelled manual', finished_at=now(), updated_at=now() WHERE status IN ('queued','running');"
+
+# Esvaziar fila (interface RabbitMQ :15672 → queue track-fraude-pipelines → Purge)
+# ou API:
+curl -s -u track_fraude:track_fraude -XDELETE \
+  http://127.0.0.1:15672/api/queues/%2F/track-fraude-pipelines/contents
+```
+
+Depois `git pull`, rebuild worker se houve correção, `kubectl apply -f infra/k8s/worker-scaledjob.yaml`, e **um** Play novo.
+
+> Com 1 GPU, o ScaledJob usa `maxReplicaCount: 1` — só um worker por vez.
+
 ### Play enfileirou mas nada processa
 
 Checklist:

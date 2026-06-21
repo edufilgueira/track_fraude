@@ -50,6 +50,36 @@ class PipelineRunRepository:
     def _conn(self):
         return get_connection(self.db)
 
+    def _sync_atlas_job(
+        self,
+        conn,
+        run_id: int,
+        *,
+        status: str,
+        error_message: str | None = None,
+    ) -> None:
+        if not self.db.is_postgres:
+            return
+        finished = status in {
+            PIPELINE_STATUS_COMPLETED,
+            PIPELINE_STATUS_FAILED,
+            PIPELINE_STATUS_CANCELLED,
+        }
+        conn.execute(
+            """
+            UPDATE atlas.jobs
+            SET status = ?,
+                error_message = COALESCE(?, error_message),
+                finished_at = CASE
+                    WHEN ? THEN COALESCE(finished_at, datetime('now'))
+                    ELSE finished_at
+                END,
+                updated_at = datetime('now')
+            WHERE pipeline_run_id = ?
+            """,
+            (status, error_message, finished, run_id),
+        )
+
     def cleanup_stale_runs(self) -> int:
         now = time.monotonic()
         if now - self._last_cleanup_at < self.CLEANUP_INTERVAL_SEC:
@@ -69,8 +99,19 @@ class PipelineRunRepository:
                 """,
                 (PIPELINE_STATUS_FAILED, cutoff),
             )
+            stale_queued = conn.execute(
+                """
+                UPDATE pipeline_runs
+                SET status = ?,
+                    error_message = COALESCE(error_message, 'stale queued run'),
+                    finished_at = datetime('now'),
+                    updated_at = datetime('now')
+                WHERE status = 'queued' AND updated_at < ?
+                """,
+                (PIPELINE_STATUS_FAILED, cutoff),
+            )
             conn.commit()
-            return cursor.rowcount
+            return cursor.rowcount + stale_queued.rowcount
 
     def start_run(self, store_db_id: int, date: str) -> int:
         with self._conn() as conn:
@@ -140,6 +181,22 @@ class PipelineRunRepository:
                 ),
             )
             conn.commit()
+        self._sync_atlas_job_for_run(run_id, status=PIPELINE_STATUS_RUNNING)
+
+    def _sync_atlas_job_for_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        error_message: str | None = None,
+    ) -> None:
+        if not self.db.is_postgres:
+            return
+        with self._conn() as conn:
+            self._sync_atlas_job(
+                conn, run_id, status=status, error_message=error_message
+            )
+            conn.commit()
 
     def update_run(
         self,
@@ -188,6 +245,7 @@ class PipelineRunRepository:
                 (status, error_message, run_id, PIPELINE_STATUS_CANCELLED),
             )
             conn.commit()
+        self._sync_atlas_job_for_run(run_id, status=status, error_message=error_message)
 
     def cancel_run(self, run_id: int) -> None:
         with self._conn() as conn:
@@ -207,6 +265,7 @@ class PipelineRunRepository:
                 ),
             )
             conn.commit()
+        self._sync_atlas_job_for_run(run_id, status=PIPELINE_STATUS_CANCELLED)
 
     def set_job_id(self, run_id: int, job_id: str) -> None:
         with self._conn() as conn:

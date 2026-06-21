@@ -89,34 +89,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config_store = load_job_store_config(args)
-    camera_ids = camera_ids_from_config(config_store)
-    scope = ProcessedScope.from_config(processed_root(ROOT), config_store)
-
-    run_config = PipelineRunConfig(
-        project_root=ROOT,
-        date=args.date,
-        store_id=config_store["store_id"],
-        group_code=config_store.get("group_code"),
-        db_path=args.db,
-        camera_ids=camera_ids,
-        skip_vision=args.skip_vision,
-        skip_evidence=args.skip_evidence,
-        pos_root=args.pos_root,
-        pos_api_url=args.pos_api_url,
-        from_phase=args.from_phase,
-        only_phase=args.only_phase,
-        only_camera=args.camera,
-        dry_run=args.dry_run,
+    run_id: int | None = (
+        int(args.run_id) if not args.dry_run and args.run_id is not None else None
     )
-
-    print(
-        f"pipeline diário: date={args.date} store={run_config.store_id} "
-        f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}"
-    )
-
-    run_id: int | None = None
     pipeline_repo = PipelineRunRepository(args.db)
+
+    result: PipelineRunResult | None = None
+    error_message: str | None = None
 
     def on_step_start(step: PipelineStep) -> None:
         if run_id is not None:
@@ -126,16 +105,38 @@ def main() -> None:
                 current_camera=step.camera_id,
             )
 
-    if not args.dry_run:
-        store_db_id = int(config_store.get("store_db_id") or 0)
-        if args.run_id is not None:
-            run_id = args.run_id
-        elif store_db_id:
-            run_id = pipeline_repo.start_run(store_db_id, args.date)
-
-    result: PipelineRunResult | None = None
-    error_message: str | None = None
     try:
+        config_store = load_job_store_config(args)
+        camera_ids = camera_ids_from_config(config_store)
+        scope = ProcessedScope.from_config(processed_root(ROOT), config_store)
+
+        run_config = PipelineRunConfig(
+            project_root=ROOT,
+            date=args.date,
+            store_id=config_store["store_id"],
+            group_code=config_store.get("group_code"),
+            db_path=args.db,
+            camera_ids=camera_ids,
+            skip_vision=args.skip_vision,
+            skip_evidence=args.skip_evidence,
+            pos_root=args.pos_root,
+            pos_api_url=args.pos_api_url,
+            from_phase=args.from_phase,
+            only_phase=args.only_phase,
+            only_camera=args.camera,
+            dry_run=args.dry_run,
+        )
+
+        print(
+            f"pipeline diário: date={args.date} store={run_config.store_id} "
+            f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}"
+        )
+
+        if not args.dry_run and run_id is None:
+            store_db_id = int(config_store.get("store_db_id") or 0)
+            if store_db_id:
+                run_id = pipeline_repo.start_run(store_db_id, args.date)
+
         if run_id is not None:
             pipeline_repo.mark_run_running(
                 run_id,

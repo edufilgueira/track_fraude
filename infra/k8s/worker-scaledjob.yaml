@@ -18,7 +18,7 @@ spec:
   pollingInterval: 10
   successfulJobsHistoryLimit: 5
   failedJobsHistoryLimit: 10
-  maxReplicaCount: 16
+  maxReplicaCount: 1
   jobTargetRef:
     backoffLimit: 0
     template:
