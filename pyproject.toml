@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-track = ["ultralytics>=8.0.0"]
+track = ["ultralytics>=8.0.0", "lap>=0.5.12"]
 dev = ["pytest>=7.0", "httpx>=0.27.0"]
 
 [tool.setuptools.packages.find]
