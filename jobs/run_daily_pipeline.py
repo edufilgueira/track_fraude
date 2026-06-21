@@ -129,7 +129,8 @@ def main() -> None:
 
         print(
             f"pipeline diário: date={args.date} store={run_config.store_id} "
-            f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}"
+            f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}",
+            flush=True,
         )
 
         if not args.dry_run and run_id is None:
@@ -180,7 +181,7 @@ def main() -> None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         with summary_path.open("w", encoding="utf-8") as handle:
             json.dump(summary, handle, indent=2, ensure_ascii=False)
-        print(f"\nresumo: {summary_path}")
+        print(f"\nresumo: {summary_path}", flush=True)
 
         state_repo = FilePipelineStateRepository(scope)
         state = state_repo.init_if_missing(args.date, camera_ids)
@@ -191,7 +192,7 @@ def main() -> None:
         }
         state_repo.save(args.date, state)
 
-    print(f"tempo total: {result.total_elapsed_sec:.1f}s")
+    print(f"tempo total: {result.total_elapsed_sec:.1f}s", flush=True)
     if not result.ok:
         raise SystemExit(1)
 

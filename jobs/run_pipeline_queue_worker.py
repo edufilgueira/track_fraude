@@ -36,14 +36,14 @@ def _run_message(message: PipelineQueueMessage) -> int:
 
     log_path = _log_path(message)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    command = [sys.executable, str(ROOT / "jobs" / "run_daily_pipeline.py"), *message.worker_args()]
+    command = [sys.executable, "-u", str(ROOT / "jobs" / "run_daily_pipeline.py"), *message.worker_args()]
     env = {
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
         "PYTHONUTF8": "1",
         "PYTHONUNBUFFERED": "1",
     }
-    with log_path.open("a", encoding="utf-8") as handle:
+    with log_path.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(f"\n--- pipeline retirado da fila: run_id={message.run_id} ---\n")
         handle.write(" ".join(command) + "\n")
         handle.flush()

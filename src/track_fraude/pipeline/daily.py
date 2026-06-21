@@ -171,7 +171,16 @@ def filter_pipeline_steps(
 
 def build_step_command(config: PipelineRunConfig, step: PipelineStep) -> list[str]:
     script = _jobs_dir(config.project_root) / step.job_script
-    return [sys.executable, str(script), *step.extra_args]
+    return [sys.executable, "-u", str(script), *step.extra_args]
+
+
+def _default_step_runner(command: list[str]) -> int:
+    return subprocess.run(
+        command,
+        check=False,
+        stdout=sys.stdout,
+        stderr=subprocess.STDOUT,
+    ).returncode
 
 
 def run_pipeline_steps(
@@ -184,14 +193,14 @@ def run_pipeline_steps(
     if not steps:
         raise ValueError("Nenhuma etapa selecionada para executar")
 
-    run = runner or (lambda command: subprocess.run(command, check=False).returncode)
+    run = runner or _default_step_runner
     result = PipelineRunResult()
 
     for step in steps:
         command = build_step_command(config, step)
         label = step.phase if step.camera_id is None else f"{step.phase}:{step.camera_id}"
-        print(f"\n=== pipeline: {label} ===")
-        print(" ".join(command))
+        print(f"\n=== pipeline: {label} ===", flush=True)
+        print(" ".join(command), flush=True)
 
         if config.dry_run:
             result.steps.append(StepResult(step=step, returncode=0, elapsed_sec=0.0, command=command))
@@ -211,7 +220,7 @@ def run_pipeline_steps(
                 command=command,
             )
         )
-        print(f"concluído em {elapsed:.1f}s (exit {returncode})")
+        print(f"concluído em {elapsed:.1f}s (exit {returncode})", flush=True)
 
         if returncode != 0:
             result.ok = False

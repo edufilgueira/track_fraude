@@ -23,6 +23,8 @@
         pinnedBottom: true,
         finishedAt: null,
         logText: "",
+        logPath: null,
+        runId: null,
         truncatedNotice: false,
         userDismissed: false,
       };
@@ -244,11 +246,24 @@
           if (!payload) {
             continue;
           }
+          if (
+            payload.log_path &&
+            state.logPath &&
+            payload.log_path !== state.logPath
+          ) {
+            state.offset = 0;
+            state.logText = "";
+            state.finishedAt = null;
+          }
+          if (payload.log_path) {
+            state.logPath = payload.log_path;
+          }
           if (payload.content) {
             appendLog(storeDbId, payload.content);
             state.offset = payload.offset;
           }
-          const failed = !payload.running && logIndicatesFailure(payload.content);
+          const failed =
+            !payload.running && logIndicatesFailure(state.logText);
           updateMeta(storeDbId, {
             date: payload.date,
             current_phase: payload.current_phase,
@@ -322,8 +337,11 @@
     const state = ensureState(detail.storeDbId);
     state.offset = 0;
     state.logText = "";
+    state.logPath = detail.logPath || null;
+    state.runId = detail.runId || null;
     state.truncatedNotice = false;
     state.userDismissed = false;
+    state.finishedAt = null;
     state.pinnedBottom = true;
     openConsole(detail.storeDbId, detail);
   });
@@ -332,15 +350,7 @@
     const running = event.detail && event.detail.running ? event.detail.running : [];
     running.forEach(function (run) {
       const state = ensureState(run.store_db_id);
-      if (!state.open && !state.userDismissed) {
-        state.offset = 0;
-        state.logText = "";
-        state.truncatedNotice = false;
-        openConsole(run.store_db_id, {
-          date: run.date,
-          storeLabel: run.store_id,
-        });
-      } else if (state.open) {
+      if (state.open) {
         updateMeta(run.store_db_id, {
           date: run.date,
           current_phase: run.current_phase,
@@ -348,7 +358,28 @@
           has_log: true,
         });
         schedulePoll();
+        return;
       }
+      if (state.userDismissed) {
+        return;
+      }
+      if (state.runId && run.run_id && state.runId === run.run_id) {
+        openConsole(run.store_db_id, {
+          date: run.date,
+          storeLabel: run.store_id,
+        });
+        schedulePoll();
+        return;
+      }
+      state.offset = 0;
+      state.logText = "";
+      state.logPath = null;
+      state.runId = run.run_id || null;
+      state.truncatedNotice = false;
+      openConsole(run.store_db_id, {
+        date: run.date,
+        storeLabel: run.store_id,
+      });
     });
   });
 

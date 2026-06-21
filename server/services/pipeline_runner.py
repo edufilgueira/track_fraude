@@ -96,11 +96,6 @@ def _path_from_log_ref(project_root: Path, log_ref: str) -> Path:
 
 
 def resolve_log_path(project_root: Path, store_db_id: int) -> Path | None:
-    with _lock:
-        tracked = _log_files.get(store_db_id)
-    if tracked is not None and tracked.is_file():
-        return tracked
-
     try:
         repo = get_pipeline_run_repo()
         run = repo.get_running_for_store(store_db_id) or repo.get_latest_run_for_store(
@@ -109,9 +104,16 @@ def resolve_log_path(project_root: Path, store_db_id: int) -> Path | None:
         if run and run.log_path:
             candidate = _path_from_log_ref(project_root, run.log_path)
             if candidate.is_file():
+                with _lock:
+                    _log_files[store_db_id] = candidate
                 return candidate
     except (sqlite3.OperationalError, OSError):
         pass
+
+    with _lock:
+        tracked = _log_files.get(store_db_id)
+    if tracked is not None and tracked.is_file():
+        return tracked
 
     return _find_latest_log(project_root, store_db_id)
 
@@ -264,7 +266,7 @@ def start_daily_pipeline(
             repo.cancel_run(run_id)
             raise RuntimeError(f"Falha ao publicar pipeline na fila: {exc}") from exc
 
-        with log_file_path.open("a", encoding="utf-8") as log_handle:
+        with log_file_path.open("a", encoding="utf-8", buffering=1) as log_handle:
             log_handle.write(f"\n--- pipeline enfileirado {datetime.now().isoformat()} ---\n")
             if settings.atlas_api_url:
                 log_handle.write(f"atlas_job: {atlas_result.get('id')}\n")

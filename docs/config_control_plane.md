@@ -137,12 +137,14 @@ sudo netplan apply
 
 Use **nomes estáveis** na LAN para SSH, navegador e `scp`, em vez de decorar IPs.
 
-| Nome (SSH / browser) | IP fixo | Hostname sistema | Nome no K3s |
-| -------------------- | ------- | ---------------- | ----------- |
-| `ctrl-p01`           | `192.168.0.199` | `ctrl-p01` | `ctrl-p01` |
-| `node-01`            | `192.168.0.201` | `node-01`  | `node-01` |
-| `node-02`            | `192.168.0.202` | `node-02`  | `node-02` |
-| `node-03`            | `192.168.0.203` | `node-03`  | `node-03` |
+
+| Nome (SSH / browser) | IP fixo         | Hostname sistema | Nome no K3s |
+| -------------------- | --------------- | ---------------- | ----------- |
+| `ctrl-p01`           | `192.168.0.199` | `ctrl-p01`       | `ctrl-p01`  |
+| `node-01`            | `192.168.0.201` | `node-01`        | `node-01`   |
+| `node-02`            | `192.168.0.202` | `node-02`        | `node-02`   |
+| `node-03`            | `192.168.0.203` | `node-03`        | `node-03`   |
+
 
 > Use o **mesmo nome** (`ctrl-p01`, `node-01`, …) em DNS, hostname Linux e nome do node K3s.
 
@@ -291,14 +293,13 @@ Depois `sudo systemctl restart rpcbind nfs-server` e libere só `20048` em vez d
 
 > Se você já tem vídeos/SQLite em outra máquina, copie para `/srv/track_fraude/data/` antes de subir o painel.
 
-**No K8s**, o painel e o worker montam **`/srv/track_fraude/data`** como `/app/data` dentro do pod. Arquivos colocados só em `~/track_fraude/data/` **não** aparecem no painel — use sempre o export NFS:
+**No K8s**, o painel e o worker montam `**/srv/track_fraude/data`** como `/app/data` dentro do pod. Arquivos colocados só em `~/track_fraude/data/` **não** aparecem no painel — use sempre o export NFS:
 
 ```text
 /srv/track_fraude/data/raw/{grupo}/{loja}/{YYYY-MM-DD}/cam1.mp4
 ```
 
 Exemplo: `/srv/track_fraude/data/raw/default/LOJA-01/2026-05-22/cam1.mp4`
-
 
 ---
 
@@ -669,7 +670,7 @@ Esperado:
 - Imagens com `${PC1_IP}:5000` (não `CHANGE_ME_REGISTRY`)
 - NFS com `server: ${PC1_IP}` e `storageClassName: track-fraude-nfs` (duas linhas no grep)
 - RabbitMQ com `${PC1_IP}:5672` (não `cluster.local`)
-- Nenhum `CHANGE_ME_*` restante nos arquivos que você vai aplicar
+- Nenhum `CHANGE_ME_`* restante nos arquivos que você vai aplicar
 
 ---
 
@@ -959,19 +960,20 @@ Para adicionar o primeiro GPU node, siga o guia dedicado:
 
 Resumo do que o GPU node precisa:
 
-| Item                                       | GPU node |
-| ------------------------------------------ | -------- |
-| Ubuntu Server                              | Sim      |
-| Driver NVIDIA + `nvidia-smi`               | Sim      |
-| NVIDIA Container Toolkit                   | Sim      |
-| K3s **agent** apontando para `PC1_IP`      | Sim      |
-| Acesso ao NFS `PC1_IP:/srv/track_fraude/data` | Sim   |
-| Registry `PC1_IP:5000` em `registries.yaml` | Sim   |
-| Symlink device-plugins (Passo 8.1)         | Sim      |
-| Label `track-fraude/gpu=true` (Passo 8.2)  | Sim      |
+
+| Item                                          | GPU node |
+| --------------------------------------------- | -------- |
+| Ubuntu Server                                 | Sim      |
+| Driver NVIDIA + `nvidia-smi`                  | Sim      |
+| NVIDIA Container Toolkit                      | Sim      |
+| K3s **agent** apontando para `PC1_IP`         | Sim      |
+| Acesso ao NFS `PC1_IP:/srv/track_fraude/data` | Sim      |
+| Registry `PC1_IP:5000` em `registries.yaml`   | Sim      |
+| Symlink device-plugins (Passo 8.1)            | Sim      |
+| Label `track-fraude/gpu=true` (Passo 8.2)     | Sim      |
+
 
 RuntimeClass `nvidia` e device plugin DaemonSet são aplicados **no ctrl-p01** (Passo 11); o label e o symlink ficam no GPU node ([config_node.md](config_node.md)).
-
 
 Quando o GPU node entrar no cluster:
 
@@ -1014,20 +1016,20 @@ Capacidade:
 ## Referências no repositório
 
 
-| Arquivo                                  | Uso                                 |
-| ---------------------------------------- | ----------------------------------- |
-| `docker-compose.infra.yml`               | Registry, RabbitMQ, Postgres no PC1 |
+| Arquivo                                  | Uso                                                    |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `docker-compose.infra.yml`               | Registry, RabbitMQ, Postgres no PC1                    |
 | `infra/k8s/`                             | Manifests K3s/KEDA (incl. `nvidia-runtime-class.yaml`) |
-| `docs/fase0_base_operacional.md`         | Checklist Fase 0                    |
-| `docs/fase1_atlas_fundacao.md`           | Platform API + schema `atlas.*`     |
-| `docs/k3s_comandos_operacionais.md`      | kubectl: listar, logs, limpar Pending |
-| `docs/config_node.md`                    | Setup GPU node (`node-01`)          |
-| `Dockerfile.atlas-platform-api`          | Imagem da Platform API              |
-| `tools/apply_atlas_schema.py`            | Schema Atlas em Postgres existente  |
-| `infra/k3s/registries.yaml.example`      | Modelo registry                     |
-| `infra/power-manager/`                   | Liga/desliga GPU nodes              |
-| `docs/arquitetura_serverless_on_prem.md` | Visão geral da arquitetura          |
-| `infra/README.md`                        | Comandos operacionais               |
+| `docs/fase0_base_operacional.md`         | Checklist Fase 0                                       |
+| `docs/fase1_atlas_fundacao.md`           | Platform API + schema `atlas.`*                        |
+| `docs/k3s_comandos_operacionais.md`      | kubectl: listar, logs, limpar Pending                  |
+| `docs/config_node.md`                    | Setup GPU node (`node-01`)                             |
+| `Dockerfile.atlas-platform-api`          | Imagem da Platform API                                 |
+| `tools/apply_atlas_schema.py`            | Schema Atlas em Postgres existente                     |
+| `infra/k3s/registries.yaml.example`      | Modelo registry                                        |
+| `infra/power-manager/`                   | Liga/desliga GPU nodes                                 |
+| `docs/arquitetura_serverless_on_prem.md` | Visão geral da arquitetura                             |
+| `infra/README.md`                        | Comandos operacionais                                  |
 
 
 ---
@@ -1035,22 +1037,22 @@ Capacidade:
 ## Problemas comuns
 
 
-| Sintoma                                 | Causa provável                       | Ação                                       |
-| --------------------------------------- | ------------------------------------ | ------------------------------------------ |
-| YAMLs corretos no Windows, cluster errado | Alterações não sincronizadas no servidor | `git pull` ou `scp` no `ctrl-p01`; Passo 10.5 |
-| PVC `Pending`, `VolumeMismatch`         | Arquivo sem `storageClassName` ou K3s usou `local-path` | `grep storageClassName` no servidor; recriar PV+PVC (Passo 11) |
-| Pod painel `Pending`, PVC não bound     | PVC sem bind ao PV NFS               | `kubectl describe pvc`; recriar claim (Passo 11) |
-| `:30080` não abre de outro PC           | Pod não `Running` ou firewall        | `kubectl get pods`; `sudo ufw allow 30080/tcp` |
-| `ImagePullBackOff` no painel            | Registry inacessível ou imagem errada | Conferir `PC1_IP:5000`, `registries.yaml`; imagem não pode ser `CHANGE_ME_REGISTRY` |
-| `_catalog` vazio após push              | Push falhou ou registry parado       | Ver saída do `docker push`; Passo 9.1      |
-| `HTTP response to HTTPS client` no push | Falta `insecure-registries`          | Passo 9.1 (`/etc/docker/daemon.json`)      |
-| Pod worker não sobe                     | Sem GPU node ou sem `nvidia.com/gpu` | [config_node.md](config_node.md) Passos 8–9; label `track-fraude/gpu=true`; limpar jobs Pending → [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) |
-| Worker `ContainerCreating`              | RuntimeClass `nvidia` ausente        | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml` |
-| Play não enfileira                      | Atlas API down, `atlas.api_url` errada ou API key inválida | `curl :30090/v1/health`; logs `atlas-platform-api`; `app-config.yaml` |
-| Play: “Nenhuma data importada”          | Vídeos fora do export NFS ou pod sem ver o mount | Copiar para `/srv/track_fraude/data/raw/...`; `kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01` |
-| Pod `atlas-platform-api` Error          | Schema `atlas.*` ausente ou Postgres inacessível | `python tools/apply_atlas_schema.py`; `kubectl logs -n track-fraude -l app=atlas-platform-api` |
-| NFS mount falha / `showmount` trava no GPU node | Firewall bloqueando RPC (111 + mountd) | No **ctrl-p01**: ufw 111, 2049, faixa 32768–65535; ver Passo 2.1 |
-| Fila cheia, nada roda                   | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
+| Sintoma                                         | Causa provável                                             | Ação                                                                                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| YAMLs corretos no Windows, cluster errado       | Alterações não sincronizadas no servidor                   | `git pull` ou `scp` no `ctrl-p01`; Passo 10.5                                                                                                                  |
+| PVC `Pending`, `VolumeMismatch`                 | Arquivo sem `storageClassName` ou K3s usou `local-path`    | `grep storageClassName` no servidor; recriar PV+PVC (Passo 11)                                                                                                 |
+| Pod painel `Pending`, PVC não bound             | PVC sem bind ao PV NFS                                     | `kubectl describe pvc`; recriar claim (Passo 11)                                                                                                               |
+| `:30080` não abre de outro PC                   | Pod não `Running` ou firewall                              | `kubectl get pods`; `sudo ufw allow 30080/tcp`                                                                                                                 |
+| `ImagePullBackOff` no painel                    | Registry inacessível ou imagem errada                      | Conferir `PC1_IP:5000`, `registries.yaml`; imagem não pode ser `CHANGE_ME_REGISTRY`                                                                            |
+| `_catalog` vazio após push                      | Push falhou ou registry parado                             | Ver saída do `docker push`; Passo 9.1                                                                                                                          |
+| `HTTP response to HTTPS client` no push         | Falta `insecure-registries`                                | Passo 9.1 (`/etc/docker/daemon.json`)                                                                                                                          |
+| Pod worker não sobe                             | Sem GPU node ou sem `nvidia.com/gpu`                       | [config_node.md](config_node.md) Passos 8–9; label `track-fraude/gpu=true`; limpar jobs Pending → [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) |
+| Worker `ContainerCreating`                      | RuntimeClass `nvidia` ausente                              | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml`                                                                                                         |
+| Play não enfileira                              | Atlas API down, `atlas.api_url` errada ou API key inválida | `curl :30090/v1/health`; logs `atlas-platform-api`; `app-config.yaml`                                                                                          |
+| Play: “Nenhuma data importada”                  | Vídeos fora do export NFS ou pod sem ver o mount           | Copiar para `/srv/track_fraude/data/raw/...`; `kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01`                    |
+| Pod `atlas-platform-api` Error                  | Schema `atlas.*` ausente ou Postgres inacessível           | `python tools/apply_atlas_schema.py`; `kubectl logs -n track-fraude -l app=atlas-platform-api`                                                                 |
+| NFS mount falha / `showmount` trava no GPU node | Firewall bloqueando RPC (111 + mountd)                     | No **ctrl-p01**: ufw 111, 2049, faixa 32768–65535; ver Passo 2.1                                                                                               |
+| Fila cheia, nada roda                           | KEDA ou ScaledJob                                          | `kubectl get scaledjob -n track-fraude`                                                                                                                        |
 
 
 Quando o GPU node estiver pronto, o fluxo completo fica:

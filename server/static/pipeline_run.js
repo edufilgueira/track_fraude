@@ -148,6 +148,7 @@
                     storeDbId: storeDbId,
                     date: payload.date,
                     runId: payload.run_id,
+                    logPath: payload.log_path,
                   },
                 })
               );
@@ -187,6 +188,7 @@
                 storeDbId: storeDbId,
                 date: payload.date,
                 runId: payload.run_id,
+                logPath: payload.log_path,
               },
             })
           );

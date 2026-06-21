@@ -383,7 +383,9 @@ kubectl logs -n keda -l app=keda-operator --tail=30
 | O que ver | Ação |
 |-----------|------|
 | `messages: 1`, sem job | Reaplique ScaledJob; confira KEDA e Secret `rabbitmq-url` |
-| job Pending `Insufficient nvidia.com/gpu` | `kubectl delete jobs -n track-fraude --all` |
+| Pod **Pending** 20+ min, `NODE` vazio | `kubectl describe pod ...` — quase sempre GPU |
+| `node-01` Ready mas **`nvidia.com/gpu: 0`** | Refazer Passo 8 [config_node.md](config_node.md#passo-8--device-plugin-nvidia-no-cluster): label, RuntimeClass, device plugin, symlink no node-01 |
+| job Pending `Insufficient nvidia.com/gpu` | Corrigir GPU acima; depois `kubectl delete jobs -n track-fraude --all` |
 | job Pending no ctrlp01 | `kubectl apply -f infra/k8s/worker-scaledjob.yaml` (affinity GPU) |
 
 ### Play enfileirou mas nada processa
