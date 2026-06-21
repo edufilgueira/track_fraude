@@ -12,8 +12,6 @@ spec:
       labels:
         name: nvidia-device-plugin-ds
     spec:
-      # K3s não usa /var/lib/kubelet — o socket fica em agent/kubelet/device-plugins
-      runtimeClassName: nvidia
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -36,6 +34,7 @@ spec:
       volumes:
         - name: device-plugin
           hostPath:
-            # Caminho real do kubelet no K3s (server e agent)
-            path: /var/lib/rancher/k3s/agent/kubelet/device-plugins
+            # Requer symlink no host (Passo 8.1 em config_node.md):
+            # /var/lib/kubelet/device-plugins -> /var/lib/rancher/k3s/agent/kubelet/device-plugins
+            path: /var/lib/kubelet/device-plugins
             type: DirectoryOrCreate

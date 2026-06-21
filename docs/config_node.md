@@ -647,6 +647,33 @@ sudo k3s crictl info | grep -i nvidia
 
 Deve aparecer referência a `nvidia` na saída. Se `nvidia-ctk: command not found`, volte ao Passo 3.
 
+### 8.1 — Symlink device-plugins (obrigatório no K3s)
+
+O kubelet do K3s usa `/var/lib/rancher/k3s/agent/kubelet/device-plugins`, mas o NVIDIA Device Plugin espera `/var/lib/kubelet/device-plugins`. Sem o symlink, o plugin sobe o socket mas o kubelet **não registra** a GPU (`context deadline exceeded` nos logs).
+
+No **node-01**:
+
+```bash
+sudo mkdir -p /var/lib/kubelet
+sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
+ls -la /var/lib/kubelet/device-plugins
+```
+
+No **ctrl-p01** (plugin também roda lá):
+
+```bash
+sudo mkdir -p /var/lib/kubelet
+sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
+```
+
+Depois reaplique o device plugin **no ctrl-p01**:
+
+```bash
+cd ~/track_fraude
+kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
+kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
+```
+
 ---
 
 ## Passo 9 — Validar GPU no cluster
@@ -698,46 +725,47 @@ nvidia.com/gpu:  1
 
 ### C — Se `nvidia.com/gpu` não aparecer
 
-Se `nvidia-smi` e o Passo 8 estão OK no node-01, mas `kubectl describe node node-01` não mostra GPU, a causa mais comum no **K3s** é o device plugin escrevendo o socket no caminho errado (`/var/lib/kubelet/...` em vez de `/var/lib/rancher/k3s/agent/kubelet/device-plugins`).
+**Sintoma nos logs:** `Could not register device plugin: context deadline exceeded`
 
-**No node-01**, confira se o socket NVIDIA existe:
+Causa: kubelet não encontra o socket do plugin — falta o **symlink** do Passo 8.1.
+
+**No node-01**, confira:
 
 ```bash
-ls -la /var/lib/rancher/k3s/agent/kubelet/device-plugins/
-# esperado após plugin OK: nvidia-gpu.sock
+ls -la /var/lib/kubelet/device-plugins
+sudo ls -la /var/lib/rancher/k3s/agent/kubelet/device-plugins/
+# esperado: kubelet.sock e (com plugin ativo) nvidia-gpu.sock
 ```
 
-**No ctrl-p01**, reaplique o manifest corrigido e reinicie o plugin:
+Se `/var/lib/kubelet/device-plugins` não for symlink, faça o [Passo 8.1](#81--symlink-device-plugins-obrigatório-no-k3s).
+
+**No ctrl-p01**, reaplique o manifest e reinicie o plugin:
 
 ```bash
 cd ~/track_fraude
-git pull   # traz infra/k8s/nvidia-device-plugin.yaml com path K3s
+git pull
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
-kubectl delete pod -n kube-system -l name=nvidia-device-plugin-ds --field-selector spec.nodeName=node-01
 ```
 
-Aguarde ~30s e valide:
+Aguarde ~30s. Logs (substitua `$POD` pelo nome do pod no node-01):
 
 ```bash
+POD=$(kubectl get pods -n kube-system -l name=nvidia-device-plugin-ds --field-selector spec.nodeName=node-01 -o jsonpath='{.items[0].metadata.name}')
+kubectl logs -n kube-system "$POD" --tail=20
 kubectl describe node node-01 | grep -A6 "nvidia.com/gpu"
-kubectl logs -n kube-system -l name=nvidia-device-plugin-ds --field-selector spec.nodeName=node-01 --tail=30
 ```
+
+Esperado nos logs: `Registered device plugin` (sem `context deadline exceeded`).
 
 Se ainda falhar:
 
-1. **No node-01:** refaça o Passo 8 e reinicie o agent (`sudo systemctl restart k3s-agent`).
-2. **No node-01**, tente runtime NVIDIA como padrão:
+1. **No node-01:** refaça Passo 8 + 8.1 e `sudo systemctl restart k3s-agent`.
+2. **No ctrl-p01**, reinicie o pod do plugin no node-01:
 
 ```bash
-sudo nvidia-ctk runtime configure \
-  --runtime=containerd \
-  --config /var/lib/rancher/k3s/agent/etc/containerd/config.toml \
-  --set-as-default
-sudo systemctl restart k3s-agent
+kubectl delete pod -n kube-system "$POD"
 ```
-
-3. **No ctrl-p01**, reinicie o pod do plugin no node-01 de novo.
 
 ---
 
