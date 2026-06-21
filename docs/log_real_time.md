@@ -1,8 +1,17 @@
-**Log completo da pipeline** = stdout do pod **worker**. O console do botão **Play** lê o **mesmo arquivo** no NFS (`/app/data/logs/pipeline_*.log`) via poll — deve mostrar a mesma saída que `kubectl logs`.
+O console do botão **Play** lê o **mesmo arquivo** no NFS (`/app/data/logs/pipeline_*.log`) via poll — deve mostrar a mesma saída que `kubectl logs`. O worker grava stdout **no arquivo e no pod** (tee).
+
+**Cancelar (botão pause):** marca o run como `cancelled` no Postgres, escreve no log e remove o pod worker (`worker_id`) via API K8s. Requer `kubectl apply -f infra/k8s/server-rbac.yaml` e restart do server.
 
 ## Durante ou logo após o Play (ctrl-p01)
 
 ```bash
+POD=$(kubectl get pods -n track-fraude -l job-name \
+  --sort-by=.metadata.creationTimestamp \
+  -o jsonpath='{.items[-1].metadata.name}')
+kubectl logs -n track-fraude "$POD" -f --tail=50
+# em outro terminal:
+tail -f /srv/track_fraude/data/logs/pipeline_*.log
+
 # Pod mais recente (Running, Completed ou Error)
 POD=$(kubectl get pods -n track-fraude -l job-name \
   --sort-by=.metadata.creationTimestamp \

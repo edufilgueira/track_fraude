@@ -82,7 +82,8 @@ def test_filter_only_track_single_camera():
 def test_build_step_command_uses_jobs_dir():
     step = PipelineStep("merge", None, "run_merge.py", ("--date", "2026-05-22"))
     command = build_step_command(_config(), step)
-    assert command[1].endswith("jobs\\run_merge.py") or command[1].endswith("jobs/run_merge.py")
+    script = command[2]
+    assert script.endswith("jobs\\run_merge.py") or script.endswith("jobs/run_merge.py")
     assert "--date" in command
 
 
@@ -103,8 +104,9 @@ def test_run_pipeline_steps_stops_on_failure():
     seen: list[str] = []
 
     def runner(command: list[str]) -> int:
-        seen.append(command[1])
-        return 1 if "run_sync.py" in command[1] else 0
+        joined = " ".join(command)
+        seen.append(joined)
+        return 1 if "run_sync.py" in joined else 0
 
     result = run_pipeline_steps(_config(), runner=runner)
     assert result.ok is False

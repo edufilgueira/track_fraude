@@ -13,6 +13,7 @@ spec:
       labels:
         app: track-fraude-server
     spec:
+      serviceAccountName: track-fraude-server
       # Painel + NFS/Postgres no ctrl-p01 — evita pod em node GPU (NodePort quebra entre nodes)
       affinity:
         nodeAffinity:

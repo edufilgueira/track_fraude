@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: track-fraude-server
+  namespace: track-fraude
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: track-fraude-server-worker-cancel
+  namespace: track-fraude
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: track-fraude-server-worker-cancel
+  namespace: track-fraude
+subjects:
+  - kind: ServiceAccount
+    name: track-fraude-server
+    namespace: track-fraude
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: track-fraude-server-worker-cancel

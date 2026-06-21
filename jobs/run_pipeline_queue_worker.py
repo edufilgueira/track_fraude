@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from track_fraude_core.pipeline_queue import (
     PIPELINE_STATUS_CANCELLED,
     PipelineQueueMessage,
 )
+from track_fraude_core.subprocess_utils import TeeWriter, run_command_with_cancel
 
 
 def _log_path(message: PipelineQueueMessage) -> Path:
@@ -47,16 +47,20 @@ def _run_message(message: PipelineQueueMessage) -> int:
         handle.write(f"\n--- pipeline retirado da fila: run_id={message.run_id} ---\n")
         handle.write(" ".join(command) + "\n")
         handle.flush()
-        # stdout/stderr do subprocesso vão para o arquivo (painel lê via NFS).
-        # redirect_stdout no processo pai não afeta o filho run_daily_pipeline.py.
-        return subprocess.run(
+        tee = TeeWriter(handle, sys.stdout)
+        should_cancel = lambda: _is_cancelled(repo, message.run_id)
+        return run_command_with_cancel(
             command,
             cwd=str(ROOT),
             env=env,
-            stdout=handle,
-            stderr=subprocess.STDOUT,
-            check=False,
-        ).returncode
+            stdout=tee,
+            should_cancel=should_cancel,
+        )
+
+
+def _is_cancelled(repo: PipelineRunRepository, run_id: int) -> bool:
+    current = repo.get_run(run_id)
+    return current is not None and current.status == PIPELINE_STATUS_CANCELLED
 
 
 def main() -> None:

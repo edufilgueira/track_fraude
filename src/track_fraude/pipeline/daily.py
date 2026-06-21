@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+
+from track_fraude_core.subprocess_utils import run_command_with_cancel
 
 PIPELINE_PHASES: tuple[str, ...] = (
     "ingest",
@@ -174,26 +176,33 @@ def build_step_command(config: PipelineRunConfig, step: PipelineStep) -> list[st
     return [sys.executable, "-u", str(script), *step.extra_args]
 
 
-def _default_step_runner(command: list[str]) -> int:
-    return subprocess.run(
+def _default_step_runner(
+    command: list[str],
+    *,
+    should_cancel: Callable[[], bool] | None = None,
+) -> int:
+    return run_command_with_cancel(
         command,
-        check=False,
         stdout=sys.stdout,
-        stderr=subprocess.STDOUT,
-    ).returncode
+        should_cancel=should_cancel,
+    )
 
 
 def run_pipeline_steps(
     config: PipelineRunConfig,
     *,
-    runner: Callable[[list[str]], int] | None = None,
+    runner: Callable[..., int] | None = None,
     on_step_start: Callable[[PipelineStep], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> PipelineRunResult:
     steps = filter_pipeline_steps(build_pipeline_steps(config), config)
     if not steps:
         raise ValueError("Nenhuma etapa selecionada para executar")
 
-    run = runner or _default_step_runner
+    if runner is None:
+        run = lambda command: _default_step_runner(command, should_cancel=should_cancel)
+    else:
+        run = runner
     result = PipelineRunResult()
 
     for step in steps:

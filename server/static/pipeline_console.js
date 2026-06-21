@@ -2,6 +2,7 @@
   const POLL_MS = 1000;
   const POLL_MS_HIDDEN = 5000;
   const TAIL_AFTER_FINISH_MS = 8000;
+  const TAIL_INCOMPLETE_MS = 120000;
   /** Limite de texto no console — evita travar a aba com logs longos. */
   const MAX_LOG_CHARS = 120000;
 
@@ -25,6 +26,7 @@
         logText: "",
         logPath: null,
         runId: null,
+        pollRunning: false,
         truncatedNotice: false,
         userDismissed: false,
       };
@@ -198,6 +200,16 @@
     return /\(exit 1\)/.test(text || "") || /"ok": false/.test(text || "");
   }
 
+  function logIsComplete(text, payload) {
+    if (payload && payload.log_complete) {
+      return true;
+    }
+    return (
+      /tempo total:\s*[\d.]+s/.test(text || "") ||
+      /--- cancelado pelo usu/i.test(text || "")
+    );
+  }
+
   async function fetchLog(storeDbId) {
     const state = ensureState(storeDbId);
     const response = await fetch(
@@ -220,8 +232,11 @@
       if (!state.open) {
         return false;
       }
-      if (!state.finishedAt) {
+      if (state.pollRunning || !state.finishedAt) {
         return true;
+      }
+      if (!logIsComplete(state.logText, null)) {
+        return Date.now() - state.finishedAt < TAIL_INCOMPLETE_MS;
       }
       return Date.now() - state.finishedAt < TAIL_AFTER_FINISH_MS;
     });
@@ -261,17 +276,23 @@
           if (payload.content) {
             appendLog(storeDbId, payload.content);
             state.offset = payload.offset;
+            if (state.finishedAt) {
+              state.finishedAt = null;
+            }
           }
+          const complete = logIsComplete(state.logText, payload);
           const failed =
-            !payload.running && logIndicatesFailure(state.logText);
+            !payload.running && complete && logIndicatesFailure(state.logText);
+          const stillRunning = payload.running || !complete;
+          state.pollRunning = stillRunning;
           updateMeta(storeDbId, {
             date: payload.date,
             current_phase: payload.current_phase,
-            running: payload.running,
+            running: stillRunning,
             has_log: payload.has_log,
             failed: failed,
           });
-          if (!payload.running && !state.finishedAt) {
+          if (!stillRunning && !state.finishedAt) {
             state.finishedAt = Date.now();
             refreshReviewButton(storeDbId);
           }

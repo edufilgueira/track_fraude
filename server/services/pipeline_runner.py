@@ -8,10 +8,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from server.dependencies import get_pipeline_run_repo, get_settings
+from server.dependencies import get_pipeline_run_repo, get_project_root, get_settings
 from server.services.atlas_client import AtlasPlatformClient, AtlasPlatformError
 from server.services.pipeline_queue import PipelineQueuePublisher
 from server.services.video_storage import format_date_br, list_raw_import_dates
+from server.services.worker_cancel import delete_worker_pod
 from server.services.worker_python import resolve_worker_python
 from track_fraude_core.pipeline_queue import PipelineQueueMessage
 
@@ -127,6 +128,23 @@ def _is_store_running(store_db_id: int) -> bool:
         return is_store_running_locally(store_db_id)
 
 
+def _log_tail_complete(path: Path, *, tail_bytes: int = 8192) -> bool:
+    try:
+        size = path.stat().st_size
+        if size <= 0:
+            return False
+        with path.open("rb") as handle:
+            handle.seek(max(0, size - tail_bytes))
+            tail = handle.read().decode("utf-8", errors="replace").lower()
+    except OSError:
+        return False
+    return (
+        "tempo total:" in tail
+        or "cancelado pelo usuário" in tail
+        or "(exit 1)" in tail
+    )
+
+
 def read_pipeline_log(
     *,
     project_root: Path,
@@ -134,6 +152,7 @@ def read_pipeline_log(
     offset: int = 0,
 ) -> dict:
     running = _is_store_running(store_db_id)
+    run_status: str | None = None
     path = resolve_log_path(project_root, store_db_id)
     if path is None:
         return {
@@ -141,7 +160,22 @@ def read_pipeline_log(
             "offset": 0,
             "running": running,
             "has_log": False,
+            "log_complete": False,
+            "run_status": run_status,
         }
+
+    if not running:
+        try:
+            repo = get_pipeline_run_repo()
+            run = repo.get_running_for_store(store_db_id) or repo.get_latest_run_for_store(
+                store_db_id
+            )
+            if run is not None:
+                run_status = run.status
+                if run.status in {"completed", "failed", "cancelled"}:
+                    running = not _log_tail_complete(path)
+        except sqlite3.OperationalError:
+            pass
 
     safe_offset = max(0, offset)
     try:
@@ -161,6 +195,8 @@ def read_pipeline_log(
             "running": running,
             "has_log": True,
             "log_path": log_path_display,
+            "log_complete": False,
+            "run_status": run_status,
             "error": (
                 "too_many_open_files"
                 if getattr(exc, "errno", None) == 24
@@ -168,12 +204,16 @@ def read_pipeline_log(
             ),
         }
 
+    log_complete = _log_tail_complete(path) if path.is_file() else False
+
     return {
         "content": chunk.decode("utf-8", errors="replace"),
         "offset": new_offset,
         "running": running,
         "has_log": True,
         "log_path": log_path_display,
+        "log_complete": log_complete,
+        "run_status": run_status,
     }
 
 
@@ -351,6 +391,8 @@ def start_daily_pipeline(
 
 def cancel_daily_pipeline(*, store_db_id: int) -> bool:
     cancelled = False
+    worker_pod: str | None = None
+    log_file_path: Path | None = None
 
     with _lock:
         proc = _running.get(store_db_id)
@@ -374,13 +416,38 @@ def cancel_daily_pipeline(*, store_db_id: int) -> bool:
 
     try:
         repo = get_pipeline_run_repo()
+        project_root = get_project_root()
         run = repo.get_running_for_store(store_db_id)
         if run is not None:
+            worker_pod = run.worker_id
+            if run.log_path:
+                log_file_path = _path_from_log_ref(project_root, run.log_path)
             repo.cancel_run(run.id)
             cancelled = True
     except sqlite3.OperationalError:
         if cancelled:
             return True
+
+    if log_file_path is None:
+        try:
+            repo = get_pipeline_run_repo()
+            run = repo.get_latest_run_for_store(store_db_id)
+            if run and run.log_path:
+                log_file_path = _path_from_log_ref(get_project_root(), run.log_path)
+        except (sqlite3.OperationalError, OSError):
+            pass
+
+    if log_file_path is not None and log_file_path.is_file():
+        try:
+            with log_file_path.open("a", encoding="utf-8", buffering=1) as handle:
+                handle.write(
+                    f"\n--- cancelado pelo usuário {datetime.now().isoformat()} ---\n"
+                )
+        except OSError:
+            pass
+
+    if worker_pod:
+        delete_worker_pod(worker_pod)
 
     return cancelled
 

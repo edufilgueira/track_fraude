@@ -29,6 +29,7 @@ from track_fraude.pipeline.daily import (
 from track_fraude.pos import DEFAULT_POS_API_URL
 from track_fraude.storage import FilePipelineStateRepository, ProcessedScope, processed_root
 from track_fraude_core.db.pipeline_run_repository import PipelineRunRepository
+from track_fraude_core.pipeline_queue import PIPELINE_STATUS_CANCELLED
 
 
 def main() -> None:
@@ -105,6 +106,12 @@ def main() -> None:
                 current_camera=step.camera_id,
             )
 
+    def should_cancel() -> bool:
+        if run_id is None:
+            return False
+        current = pipeline_repo.get_run(run_id)
+        return current is not None and current.status == PIPELINE_STATUS_CANCELLED
+
     try:
         config_store = load_job_store_config(args)
         camera_ids = camera_ids_from_config(config_store)
@@ -145,7 +152,11 @@ def main() -> None:
                 worker_id=os.getenv("HOSTNAME"),
                 job_id=os.getenv("JOB_NAME"),
             )
-        result = run_pipeline_steps(run_config, on_step_start=on_step_start)
+        result = run_pipeline_steps(
+            run_config,
+            on_step_start=on_step_start,
+            should_cancel=should_cancel,
+        )
     except Exception as exc:
         error_message = str(exc)
         raise
