@@ -285,6 +285,22 @@ class PipelineRunRepository:
                 return run
         return None
 
+    def get_latest_run_for_store(self, store_db_id: int) -> PipelineRunRecord | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT r.*, s.store_id, s.group_db_id, g.group_code
+                FROM pipeline_runs r
+                JOIN stores s ON s.id = r.store_db_id
+                JOIN groups g ON g.id = s.group_db_id
+                WHERE r.store_db_id = ?
+                ORDER BY r.id DESC
+                LIMIT 1
+                """,
+                (store_db_id,),
+            ).fetchone()
+        return self._row_to_record(row) if row else None
+
     def get_run(self, run_id: int) -> PipelineRunRecord | None:
         with self._conn() as conn:
             row = conn.execute(

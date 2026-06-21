@@ -353,6 +353,18 @@ kubectl apply -f infra/k8s/worker-scaledjob.yaml
 kubectl delete jobs -n track-fraude --all
 ```
 
+### Logs do worker fora de ordem (`-l job-name -f`)
+
+**Sintoma:** fases intercaladas (ex.: `merge` antes de `track`, dois `resumo` no meio).
+
+**Causa:** `kubectl logs -l job-name` agrega **todos** os pods de jobs (inclusive Completed). Use **um pod**:
+
+```bash
+kubectl get pods -n track-fraude -l job-name --sort-by=.metadata.creationTimestamp
+POD=track-fraude-worker-xxxxx-yyyyy   # o mais recente
+kubectl logs -n track-fraude "$POD" --tail=120
+```
+
 ### Play para em `pipeline enfileirado` (sem `retirado da fila`)
 
 **Sintoma:** console mostra só `atlas_job:` / `message_id: pipeline-N`, **sem** `--- pipeline retirado da fila ---` (pod já **Running** há minutos).

@@ -88,11 +88,31 @@ def _find_latest_log(project_root: Path, store_db_id: int) -> Path | None:
     return matches[0] if matches else None
 
 
+def _path_from_log_ref(project_root: Path, log_ref: str) -> Path:
+    candidate = Path(log_ref)
+    if not candidate.is_absolute():
+        candidate = project_root / candidate
+    return candidate
+
+
 def resolve_log_path(project_root: Path, store_db_id: int) -> Path | None:
     with _lock:
         tracked = _log_files.get(store_db_id)
     if tracked is not None and tracked.is_file():
         return tracked
+
+    try:
+        repo = get_pipeline_run_repo()
+        run = repo.get_running_for_store(store_db_id) or repo.get_latest_run_for_store(
+            store_db_id
+        )
+        if run and run.log_path:
+            candidate = _path_from_log_ref(project_root, run.log_path)
+            if candidate.is_file():
+                return candidate
+    except (sqlite3.OperationalError, OSError):
+        pass
+
     return _find_latest_log(project_root, store_db_id)
 
 
