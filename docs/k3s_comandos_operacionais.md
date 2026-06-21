@@ -1,0 +1,344 @@
+# K3s / kubectl — comandos operacionais (track-fraude)
+
+Guia prático para **listar**, **inspecionar**, **reiniciar** e **limpar** recursos no cluster K3s do projeto.
+
+Relacionado: [config_control_plane.md](config_control_plane.md), [config_node.md](config_node.md), [fase0_base_operacional.md](fase0_base_operacional.md), [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md).
+
+---
+
+## Contexto rápido
+
+
+| Recurso K8s          | O que é no track_fraude                                                             |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| **Deployment**       | Painel (`track-fraude-server`) e Atlas API (`atlas-platform-api`) — pods long-lived |
+| **ScaledJob** (KEDA) | Worker GPU — cria **Jobs** quando a fila RabbitMQ tem mensagens                     |
+| **Job**              | Uma execução do pipeline (1 pod worker)                                             |
+| **Pod**              | Container rodando (ou tentando rodar)                                               |
+| **Service**          | Expõe portas: painel `:30080`, Atlas `:30090`                                       |
+
+
+Namespace usado em tudo abaixo:
+
+```bash
+export NS=track-fraude
+```
+
+Atalho mental: `-n track-fraude` em todo comando `kubectl`.
+
+---
+
+## 1. Listar recursos
+
+### Visão geral
+
+```bash
+kubectl get all -n track-fraude
+```
+
+### Pods (processos/containers)
+
+```bash
+kubectl get pods -n track-fraude
+kubectl get pods -n track-fraude -o wide    # inclui IP e node
+kubectl get pods -n track-fraude -w         # acompanha em tempo real (Ctrl+C para sair)
+```
+
+Colunas importantes:
+
+
+| STATUS                       | Significado                                   |
+| ---------------------------- | --------------------------------------------- |
+| **Running**                  | Container ok                                  |
+| **Pending**                  | Ainda não agendou (ex.: sem GPU, PVC, imagem) |
+| **Error / CrashLoopBackOff** | Subiu e caiu — ver logs                       |
+| **Terminating**              | Sendo removido (normal após delete)           |
+
+
+### Deployments (painel e Atlas API)
+
+```bash
+kubectl get deployments -n track-fraude
+```
+
+### Jobs e worker GPU
+
+```bash
+kubectl get jobs -n track-fraude
+kubectl get scaledjob -n track-fraude
+```
+
+### Serviços e portas
+
+```bash
+kubectl get svc -n track-fraude
+```
+
+### Nodes do cluster
+
+```bash
+kubectl get nodes
+kubectl describe node <nome-do-node> | grep -A5 nvidia.com/gpu
+```
+
+### PVC (dados NFS)
+
+```bash
+kubectl get pvc -n track-fraude
+```
+
+---
+
+## 2. Inspecionar (por que está Pending / Error?)
+
+### Descrever um pod
+
+```bash
+kubectl describe pod -n track-fraude <nome-do-pod>
+```
+
+Role até **Events** no final. Exemplos comuns:
+
+```text
+Insufficient nvidia.com/gpu     → sem GPU node no cluster
+PersistentVolumeClaim not bound → PVC/NFS com problema
+ImagePullBackOff                → imagem não existe no registry
+```
+
+Atalho por label:
+
+```bash
+# Pod do painel
+kubectl describe pod -n track-fraude -l app=track-fraude-server
+
+# Pod de um job worker (troque o prefixo do job)
+kubectl describe pod -n track-fraude -l job-name=track-fraude-worker-xxxxx
+```
+
+### Logs
+
+```bash
+# Painel
+kubectl logs -n track-fraude -l app=track-fraude-server --tail=50
+
+# Atlas Platform API
+kubectl logs -n track-fraude -l app=atlas-platform-api --tail=50
+
+# Worker (job específico)
+kubectl logs -n track-fraude <nome-do-pod-worker> --tail=100
+
+# Pod que já reiniciou — log anterior
+kubectl logs -n track-fraude <nome-do-pod> --previous --tail=100
+```
+
+### Entrar no container (debug)
+
+```bash
+kubectl exec -it -n track-fraude deploy/track-fraude-server -- bash
+kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01
+```
+
+---
+
+## 3. Reiniciar (sem apagar configuração)
+
+Deployments recriam o pod com a mesma config:
+
+```bash
+kubectl rollout restart deployment/track-fraude-server -n track-fraude
+kubectl rollout restart deployment/atlas-platform-api -n track-fraude
+
+kubectl rollout status deployment/track-fraude-server -n track-fraude
+```
+
+Útil após `docker push` de imagem nova ou mudança no ConfigMap:
+
+```bash
+kubectl apply -f infra/k8s/app-config.yaml
+kubectl rollout restart deployment/track-fraude-server -n track-fraude
+```
+
+---
+
+## 4. Deletar / limpar
+
+### Um pod específico
+
+Deployment **recria** o pod sozinho:
+
+```bash
+kubectl delete pod -n track-fraude <nome-do-pod>
+```
+
+Job **não** recria — KEDA só cria job novo se houver mensagem na fila.
+
+### Todos os pods de um Deployment (força recriação)
+
+```bash
+kubectl delete pod -n track-fraude -l app=track-fraude-server
+kubectl delete pod -n track-fraude -l app=atlas-platform-api
+```
+
+### Jobs worker presos em Pending
+
+Quando **não há GPU node**, jobs acumulam em Pending. **Pode apagar** — não quebra o painel nem a API.
+
+Listar:
+
+```bash
+kubectl get jobs -n track-fraude
+```
+
+Apagar um job (remove o pod junto):
+
+```bash
+kubectl delete job -n track-fraude track-fraude-worker-xxxxx
+```
+
+Apagar **todos** os jobs do namespace:
+
+```bash
+kubectl delete jobs -n track-fraude --all
+```
+
+Se preferir um a um:
+
+```bash
+kubectl get jobs -n track-fraude -o name | xargs -r kubectl delete -n track-fraude
+```
+
+> **Nota:** Se a fila RabbitMQ ainda tiver mensagens, o KEDA pode criar **novos** jobs em ~10s. Esvazie a fila ou cancele o run no painel (Pause) se não for processar agora.
+
+### Ver fila RabbitMQ (host)
+
+```bash
+curl -s -u track_fraude:track_fraude \
+  http://127.0.0.1:15672/api/queues/%2F/track-fraude-pipelines \
+  | jq '.messages, .consumers'
+```
+
+Interface web: `http://<IP-do-servidor>:15672` (usuário `track_fraude`).
+
+---
+
+## 5. Cenários comuns
+
+### Worker Pending (sem GPU)
+
+**Sintoma:**
+
+```text
+track-fraude-worker-xxxxx-yyyyy   0/1   Pending
+```
+
+**Causa:** cluster só tem control plane; worker pede `nvidia.com/gpu: 1`.
+
+**O que fazer:**
+
+1. Limpar jobs Pending (seção 4) — opcional, recomendado para não poluir
+2. Configurar GPU node → [config_node.md](config_node.md)
+3. Confirmar GPU no node: `kubectl describe node <gpu-node> | grep nvidia.com/gpu`
+4. Play de novo ou aguardar KEDA recriar job quando a fila tiver mensagem
+
+**Não é necessário** derrubar `track-fraude-server` nem `atlas-platform-api`.
+
+### Play enfileirou mas nada processa
+
+Checklist:
+
+```bash
+curl -s http://127.0.0.1:30090/v1/health
+curl -s -u track_fraude:track_fraude http://127.0.0.1:15672/api/queues/%2F/track-fraude-pipelines | jq '.messages'
+kubectl get scaledjob -n track-fraude
+kubectl get jobs,pods -n track-fraude
+```
+
+### Pod Error / CrashLoopBackOff (painel ou API)
+
+```bash
+kubectl logs -n track-fraude <pod> --tail=80
+kubectl logs -n track-fraude <pod> --previous --tail=80
+kubectl describe pod -n track-fraude <pod>
+```
+
+Corrija (imagem, ConfigMap, Postgres) e:
+
+```bash
+kubectl rollout restart deployment/<nome> -n track-fraude
+```
+
+### Teste de isolamento (Fase 0)
+
+Worker deve continuar mesmo com painel offline:
+
+```bash
+kubectl delete pod -n track-fraude -l app=track-fraude-server
+kubectl get jobs -n track-fraude -w
+```
+
+---
+
+## 6. Health checks fora do kubectl
+
+```bash
+curl -s http://127.0.0.1:30080/health    # painel
+curl -s http://127.0.0.1:30090/v1/health # Atlas Platform API
+```
+
+---
+
+## 7. Cheat sheet (copiar e colar)
+
+```bash
+NS=track-fraude
+
+# Listar
+kubectl get pods,jobs,deploy,svc,scaledjob -n $NS
+
+# Logs painel + API
+kubectl logs -n $NS -l app=track-fraude-server --tail=30
+kubectl logs -n $NS -l app=atlas-platform-api --tail=30
+
+# Por que Pending?
+kubectl describe pod -n $NS <POD>
+
+# Limpar jobs worker Pending
+kubectl delete jobs -n $NS --all
+
+# Reiniciar painel / API
+kubectl rollout restart deployment/track-fraude-server -n $NS
+kubectl rollout restart deployment/atlas-platform-api -n $NS
+
+# GPU no cluster?
+kubectl get nodes
+kubectl describe node <NODE> | grep -A5 nvidia.com/gpu
+```
+
+---
+
+## 8. O que **não** deletar sem necessidade
+
+
+| Recurso                         | Motivo                              |
+| ------------------------------- | ----------------------------------- |
+| `namespace track-fraude`        | Remove tudo do app                  |
+| PVC `track-fraude-data`         | Dados NFS (vídeos, logs, processed) |
+| PV `track-fraude-data-nfs`      | Bind do storage                     |
+| ScaledJob `track-fraude-worker` | KEDA para de observar a fila        |
+
+
+Para **pausar** workers temporariamente sem remover o ScaledJob, esvazie a fila RabbitMQ e delete os jobs Pending.
+
+---
+
+## 9. Referências
+
+
+| Documento                                                             | Conteúdo                       |
+| --------------------------------------------------------------------- | ------------------------------ |
+| [config_control_plane.md](config_control_plane.md)                    | Instalação completa do ctrlp01 |
+| [config_node.md](config_node.md)                                      | GPU node + NVIDIA              |
+| [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md)                    | Deploy Atlas Platform API      |
+| [Documentação kubectl](https://kubernetes.io/docs/reference/kubectl/) | Referência oficial             |
+
+

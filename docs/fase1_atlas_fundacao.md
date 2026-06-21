@@ -2,7 +2,7 @@
 
 Objetivo: Platform API enfileira jobs; track_fraude UI deixa de publicar direto no RabbitMQ.
 
-Relacionado: [plano_execucao.md](../plano_execucao.md), [fase0_base_operacional.md](fase0_base_operacional.md).
+Relacionado: [plano_execucao.md](../plano_execucao.md), [fase0_base_operacional.md](fase0_base_operacional.md), [config_control_plane.md](config_control_plane.md), [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md).
 
 ---
 
