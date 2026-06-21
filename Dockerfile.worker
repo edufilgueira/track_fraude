@@ -1,4 +1,6 @@
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+# RTX 50 (Blackwell, sm_120) exige PyTorch 2.7+ com CUDA 12.8 — 2.5.x+cu124 falha com
+# "no kernel image is available for execution on the device".
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
@@ -25,7 +27,11 @@ COPY pyproject.toml README.md ./
 RUN python -m pip install --upgrade pip \
     && python -m pip install -e "./core[postgres]" \
     && python -m pip install -e ".[track]" \
-    && python -m pip install "pika>=1.3.0" "lap>=0.5.12"
+    && python -m pip install "pika>=1.3.0" "lap>=0.5.12" \
+    && python -m pip install --force-reinstall torch torchvision \
+        --index-url https://download.pytorch.org/whl/cu128
+
+RUN python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)"
 
 # Pesos YOLO no build (ctrl-p01 com internet) — GPU node offline não baixa do GitHub
 RUN mkdir -p /app/models \

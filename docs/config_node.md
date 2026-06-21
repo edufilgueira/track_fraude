@@ -83,7 +83,7 @@ Requisitos de hardware sugeridos:
 - Rede cabeada (IP fixo no roteador)
 - **Não** precisa de disco grande de vídeos — os dados vêm do NFS do PC1
 
-> GPUs RTX 50 (Blackwell) exigem driver **570+** (ex.: 595). Se `nvidia-smi` falhar após instalar o driver, verifique na BIOS **Above 4G Decoding** habilitado e, se necessário, parâmetro de kernel `pci=realloc=off` (ver [Passo 2](#passo-2--driver-nvidia)).
+> GPUs RTX 50 (Blackwell, ex. RTX 5060) exigem driver **570+** (ex.: 595) e imagem worker **PyTorch 2.7 + CUDA 12.8**. PyTorch 2.5 falha com `no kernel image is available for execution on the device`. Se `nvidia-smi` falhar no host, verifique BIOS **Above 4G Decoding** e `pci=realloc=off` ([Passo 2](#passo-2--driver-nvidia)).
 
 ---
 
@@ -833,6 +833,8 @@ curl -s http://${PC1_IP}:5000/v2/track-fraude-worker/tags/list
 
 > O build da imagem worker **baixa `yolov8n.pt`** em `/app/models/` (precisa de internet no **ctrl-p01** durante `docker build`). O GPU node **não** precisa de internet em runtime.
 
+> Base da imagem: `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime` (RTX 50 / Blackwell). O build demora mais e a imagem fica ~8 GB.
+
 ---
 
 ## Passo 10 — Teste de pipeline (Play)
@@ -1070,8 +1072,8 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 | Worker `Pending` (GPU)                            | Sem GPU alocável no cluster                | `kubectl describe node node-01`; device plugin Running; ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)         |
 | Worker `ContainerCreating` (runtime)            | Falta RuntimeClass `nvidia`                | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml`; worker usa `runtimeClassName: nvidia`                                    |
 | Worker falha ao montar volume / `showmount` trava | Firewall RPC no **ctrl-p01** (não no node) | [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes); `timeout 10 showmount -e PC1_IP` |
-| Worker `Error` na fase track (`No module named 'lap'`) | ByteTrack sem dep `lap` no container   | Rebuild `Dockerfile.worker` (`lap>=0.5.12` no build)                                                                              |
-| Worker `Error` na fase track/vision (YOLO download)  | GPU node sem internet                  | Rebuild `Dockerfile.worker` (pesos em `/app/models` no build)                                                                   |
+| Worker `Error` track CUDA `no kernel image`        | PyTorch antigo (RTX 50 / sm_120)       | Rebuild worker com `pytorch:2.7.1-cuda12.8` (Passo 9.1)                                                                          |
+| Worker `Error` na fase track (`No module named 'lap'`) | ByteTrack sem dep `lap`            | Rebuild `Dockerfile.worker` (`lap>=0.5.12`)                                                                                     |
 | Worker `Error` (schema Postgres)                  | Imagem worker antiga                       | Rebuild/push `Dockerfile.worker` (Passo 9.1)                                                                                     |
 | Job criado mas não roda no node                   | Node `NotReady` ou sem GPU livre           | `kubectl describe node`; jobs antigos ocupando GPU                                                                               |
 | ScaledJob `READY Unknown`                         | Normal sem fila ou KEDA validando          | Enfileirar job com Play; checar logs do KEDA                                                                                     |
