@@ -20,22 +20,28 @@ spec:
       containers:
         - image: nvcr.io/nvidia/k8s-device-plugin:v0.16.2
           name: nvidia-device-plugin-ctr
+          args:
+            - --device-discovery-strategy=nvml
+            - --fail-on-init-error=false
           env:
             - name: FAIL_ON_INIT_ERROR
               value: "false"
-            # "auto" falha em K3s sem CDI; nvml usa driver do host via /dev
-            - name: NVIDIA_DEVICE_DISCOVERY_STRATEGY
+            # Env correto (NÃO use NVIDIA_DEVICE_DISCOVERY_STRATEGY)
+            - name: DEVICE_DISCOVERY_STRATEGY
               value: nvml
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
-              drop:
-                - ALL
+              add:
+                - SYS_ADMIN
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
             - name: dev
               mountPath: /dev
+            - name: nvidia-libs
+              mountPath: /usr/lib/x86_64-linux-gnu
+              readOnly: true
       volumes:
         - name: device-plugin
           hostPath:
@@ -45,3 +51,6 @@ spec:
         - name: dev
           hostPath:
             path: /dev
+        - name: nvidia-libs
+          hostPath:
+            path: /usr/lib/x86_64-linux-gnu

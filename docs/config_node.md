@@ -737,7 +737,7 @@ nvidia.com/gpu:  1
 
 **Sintoma nos logs:** `Could not register device plugin: context deadline exceeded` → symlink errado (pasta em vez de link).
 
-**Sintoma nos logs:** `Incompatible strategy detected auto` / `No devices found` → reaplique o manifest com `NVIDIA_DEVICE_DISCOVERY_STRATEGY=nvml` e mount `/dev` (`git pull` + `kubectl apply`).
+**Sintoma nos logs:** `Incompatible strategy detected auto` / `No devices found` → use `DEVICE_DISCOVERY_STRATEGY=nvml` (não `NVIDIA_DEVICE_DISCOVERY_STRATEGY`) e reaplique o manifest (`git pull` + `kubectl apply`).
 
 Causa do symlink: se `/var/lib/kubelet/device-plugins` já era **pasta**, o `ln -s` criou link *dentro* dela. Corrija com [Passo 8.1](#81--symlink-device-plugins-obrigatório-no-k3s) (`rm -rf` antes do `ln -sfn`).
 
