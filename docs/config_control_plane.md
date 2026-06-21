@@ -352,6 +352,8 @@ git pull
 scp infra/k8s/data-nfs-pvc.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
 scp infra/k8s/server-deployment.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
 scp infra/k8s/worker-scaledjob.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/nvidia-runtime-class.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/nvidia-device-plugin.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
 scp infra/k8s/atlas-platform-api.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
 scp infra/k8s/app-config.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
 ```
@@ -686,15 +688,18 @@ Ainda na raiz do repo:
 ```bash
 cd ~/track_fraude
 
-# Namespace, NFS, secrets, Atlas API, server, worker scaledjob, nvidia plugin
+# Namespace, NFS, secrets, Atlas API, server, worker scaledjob, GPU (RuntimeClass + plugin)
 kubectl apply -f infra/k8s/namespace.yaml
 kubectl apply -f infra/k8s/data-nfs-pvc.yaml
 kubectl apply -f infra/k8s/app-config.yaml
 kubectl apply -f infra/k8s/atlas-platform-api.yaml
 kubectl apply -f infra/k8s/server-deployment.yaml
 kubectl apply -f infra/k8s/worker-scaledjob.yaml
+kubectl apply -f infra/k8s/nvidia-runtime-class.yaml
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 ```
+
+> **GPU:** a RuntimeClass `nvidia` é necessária para workers (`runtimeClassName: nvidia` no ScaledJob). O device plugin **só registra GPUs** depois que um GPU node entra no cluster com label `track-fraude/gpu=true` — veja [config_node.md — Passo 8.2](config_node.md#82--runtimeclass-e-label-do-node-gpu). Até lá, jobs worker ficam `Pending` (normal).
 
 **Antes do primeiro deploy (Postgres já existente):** aplique o schema Atlas:
 
@@ -962,6 +967,10 @@ Resumo do que o GPU node precisa:
 | K3s **agent** apontando para `PC1_IP`      | Sim      |
 | Acesso ao NFS `PC1_IP:/srv/track_fraude/data` | Sim   |
 | Registry `PC1_IP:5000` em `registries.yaml` | Sim   |
+| Symlink device-plugins (Passo 8.1)         | Sim      |
+| Label `track-fraude/gpu=true` (Passo 8.2)  | Sim      |
+
+RuntimeClass `nvidia` e device plugin DaemonSet são aplicados **no ctrl-p01** (Passo 11); o label e o symlink ficam no GPU node ([config_node.md](config_node.md)).
 
 
 Quando o GPU node entrar no cluster:
@@ -995,10 +1004,10 @@ Capacidade:
 12. [ ] Sincronizar no `ctrl-p01` (`git pull` ou `scp`) se editou em outro PC
 13. [ ] Conferir YAMLs com `grep` (Passo 10.5)
 14. [ ] `python tools/apply_atlas_schema.py` (Postgres existente)
-15. [ ] `kubectl apply` namespace, nfs, app, **atlas-platform-api**, server, worker
+15. [ ] `kubectl apply` namespace, nfs, app, **atlas-platform-api**, server, worker, **nvidia-runtime-class**, device plugin
 16. [ ] Painel `mode: queue` + Platform API `:30090/health` ok
 17. [ ] Validar serviços
-18. [ ] Adicionar GPU node — [config_node.md](config_node.md)
+18. [ ] Adicionar GPU node — [config_node.md](config_node.md) (label + symlink + validar `nvidia.com/gpu`)
 
 ---
 
@@ -1008,7 +1017,7 @@ Capacidade:
 | Arquivo                                  | Uso                                 |
 | ---------------------------------------- | ----------------------------------- |
 | `docker-compose.infra.yml`               | Registry, RabbitMQ, Postgres no PC1 |
-| `infra/k8s/`                             | Manifests K3s/KEDA                  |
+| `infra/k8s/`                             | Manifests K3s/KEDA (incl. `nvidia-runtime-class.yaml`) |
 | `docs/fase0_base_operacional.md`         | Checklist Fase 0                    |
 | `docs/fase1_atlas_fundacao.md`           | Platform API + schema `atlas.*`     |
 | `docs/k3s_comandos_operacionais.md`      | kubectl: listar, logs, limpar Pending |
@@ -1035,7 +1044,8 @@ Capacidade:
 | `ImagePullBackOff` no painel            | Registry inacessível ou imagem errada | Conferir `PC1_IP:5000`, `registries.yaml`; imagem não pode ser `CHANGE_ME_REGISTRY` |
 | `_catalog` vazio após push              | Push falhou ou registry parado       | Ver saída do `docker push`; Passo 9.1      |
 | `HTTP response to HTTPS client` no push | Falta `insecure-registries`          | Passo 9.1 (`/etc/docker/daemon.json`)      |
-| Pod worker não sobe                     | Sem GPU node no cluster              | [config_node.md](config_node.md); limpar jobs Pending → [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) |
+| Pod worker não sobe                     | Sem GPU node ou sem `nvidia.com/gpu` | [config_node.md](config_node.md) Passos 8–9; label `track-fraude/gpu=true`; limpar jobs Pending → [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) |
+| Worker `ContainerCreating`              | RuntimeClass `nvidia` ausente        | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml` |
 | Play não enfileira                      | Atlas API down, `atlas.api_url` errada ou API key inválida | `curl :30090/v1/health`; logs `atlas-platform-api`; `app-config.yaml` |
 | Play: “Nenhuma data importada”          | Vídeos fora do export NFS ou pod sem ver o mount | Copiar para `/srv/track_fraude/data/raw/...`; `kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01` |
 | Pod `atlas-platform-api` Error          | Schema `atlas.*` ausente ou Postgres inacessível | `python tools/apply_atlas_schema.py`; `kubectl logs -n track-fraude -l app=atlas-platform-api` |

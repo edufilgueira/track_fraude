@@ -6,7 +6,7 @@ Neste cenário:
 
 - O **control plane** já está pronto (`ctrl-p01` / `PC1_IP`) — veja [config_control_plane.md](config_control_plane.md).
 - **Fase 0 + Fase 1** concluídas no PC1: Postgres, Atlas Platform API, painel enfileirando via API — [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md).
-- Este guia configura `**node-01`**, que entra no cluster como **K3s agent** e processa pipelines via container `track-fraude-worker`.
+- Este guia configura **`node-01`**, que entra no cluster como **K3s agent** e processa pipelines via container `track-fraude-worker`.
 - Você **não** instala Python, Ultralytics ou worker `.venv` no host — tudo roda na imagem Docker puxada do registry do PC1.
 
 **Sistema alvo:** Ubuntu Server (somente terminal, sem interface gráfica).
@@ -42,9 +42,10 @@ Antes de ligar o `node-01`, confirme no PC1:
 | NFS export ativo            | `showmount -e localhost` → `/srv/track_fraude/data`                               |
 | KEDA instalado              | `kubectl get pods -n keda`                                                        |
 | ScaledJob criado            | `kubectl get scaledjob -n track-fraude`                                           |
-| NVIDIA Device Plugin        | `kubectl get ds -n kube-system nvidia-device-plugin-daemonset`                    |
+| RuntimeClass `nvidia`       | `kubectl get runtimeclass nvidia` (aplicada no Passo 11 do control plane)         |
+| NVIDIA Device Plugin DS     | `kubectl get ds -n kube-system nvidia-device-plugin-daemonset`                    |
 | Atlas Platform API          | `curl -s http://127.0.0.1:30090/v1/health` → `ok`                                 |
-| Painel + Atlas no ConfigMap | `grep -E 'mode: queue                                                             |
+| Painel + Atlas no ConfigMap | `grep -E 'mode: queue|api_url' infra/k8s/app-config.yaml`                         |
 | Verificação Fase 1          | `python tools/verify_fase1.py --api-url http://127.0.0.1:30090`                   |
 
 
@@ -76,11 +77,13 @@ Preencha estes valores:
 
 Requisitos de hardware sugeridos:
 
-- GPU NVIDIA (RTX série 30/40 ou equivalente com driver Linux)
+- GPU NVIDIA (RTX série 30/40/50 ou equivalente com driver Linux recente)
 - CPU 4+ núcleos, 16 GB+ RAM
 - SSD 256 GB+ para sistema
 - Rede cabeada (IP fixo no roteador)
 - **Não** precisa de disco grande de vídeos — os dados vêm do NFS do PC1
+
+> GPUs RTX 50 (Blackwell) exigem driver **570+** (ex.: 595). Se `nvidia-smi` falhar após instalar o driver, verifique na BIOS **Above 4G Decoding** habilitado e, se necessário, parâmetro de kernel `pci=realloc=off` (ver [Passo 2](#passo-2--driver-nvidia)).
 
 ---
 
@@ -442,6 +445,23 @@ nvidia-smi
 
 Esperado: tabela com nome da GPU, driver e memória. Se falhar, o restante do guia não funciona.
 
+**RTX 50 / `nvidia-smi` falha no host (antes do K3s):**
+
+```bash
+# Driver carregado?
+lsmod | grep nvidia
+cat /proc/driver/nvidia/version
+
+# Erros de BAR/PCI no boot?
+sudo dmesg | grep -iE 'nvrm|nvidia|pci'
+```
+
+| Sintoma no host | Ação |
+| --------------- | ---- |
+| `couldn't communicate with the NVIDIA driver` | Reinstale driver (`ubuntu-drivers autoinstall`); reinicie |
+| `PCI I/O region ... invalid` / `BAR0 is 0M` | BIOS: habilite **Above 4G Decoding**; teste `pci=realloc=off` no GRUB |
+| `Driver/library version mismatch` | Reboot; se persistir, reinstale driver limpo |
+
 > Ative Wake-on-LAN na BIOS/UEFI se planejar usar o Power Manager para ligar o node sob demanda.
 
 ---
@@ -590,9 +610,11 @@ Esperado:
 
 ```text
 NAME      STATUS   ROLES                  AGE   VERSION
-ctrlp01   Ready    control-plane            ...   v1.x.x+k3s
-node-01   Ready    <none>                   ...   v1.x.x+k3s
+ctrl-p01  Ready    control-plane,master   ...   v1.x.x+k3s
+node-01   Ready    <none>                 ...   v1.x.x+k3s
 ```
+
+> O nome do control plane em `kubectl get nodes` pode aparecer como `ctrl-p01` ou `ctrlp01` (hostname sem hífen). O importante é bater com `K3S_NODE_NAME` / Power Manager `"name"`.
 
 ### Validar Power Manager (se configurou no Passo 0.1)
 
@@ -653,21 +675,16 @@ O kubelet do K3s usa `/var/lib/rancher/k3s/agent/kubelet/device-plugins`, mas o 
 
 **Importante:** se `/var/lib/kubelet/device-plugins` já existir como **pasta**, remova antes de criar o symlink (senão o `ln -s` cria um link *dentro* da pasta, errado).
 
-No **node-01**:
+No **node-01** (obrigatório — o device plugin roda só em nodes GPU):
 
 ```bash
 sudo rm -rf /var/lib/kubelet/device-plugins
 sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
 sudo ls -la /var/lib/kubelet/device-plugins
-# esperado: kubelet.sock (e depois nvidia-gpu.sock com plugin OK)
+# esperado: symlink → .../rancher/k3s/agent/kubelet/device-plugins
 ```
 
-No **ctrl-p01** (plugin também roda lá):
-
-```bash
-sudo rm -rf /var/lib/kubelet/device-plugins
-sudo ln -sfn /var/lib/rancher/k3s/agent/kubelet/device-plugins /var/lib/kubelet/device-plugins
-```
+No **ctrl-p01** o symlink **não** é necessário para o device plugin (ele não agenda lá). Opcional se outros pods usarem device-plugins no control plane.
 
 Reinicie o agent no **node-01** se o symlink foi corrigido:
 
@@ -693,7 +710,7 @@ kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
 ```
 
-> O plugin usa `runtimeClassName: nvidia` e só agenda em nodes com label `track-fraude/gpu=true`. Não é necessário rodá-lo no ctrl-p01.
+> O plugin usa `runtimeClassName: nvidia` e só agenda em nodes com label `track-fraude/gpu=true`. Workers GPU (`worker-scaledjob.yaml`) também usam `runtimeClassName: nvidia` — aplique a RuntimeClass **antes** do primeiro job worker.
 
 ---
 
@@ -783,7 +800,9 @@ kubectl logs -n kube-system "$POD" --tail=20
 kubectl describe node node-01 | grep -A6 "nvidia.com/gpu"
 ```
 
-Esperado nos logs: `Registered device plugin` (sem `context deadline exceeded`).
+Esperado nos logs: `Registered device plugin for 'nvidia.com/gpu'` (sem `context deadline exceeded` nem `Failed to initialize NVML`).
+
+> Evento `CIDRAssignmentFailed` em `kubectl describe node node-01` é comum em clusters pequenos K3s e **não** impede GPU ou jobs.
 
 Se ainda falhar:
 
@@ -809,6 +828,8 @@ docker push ${PC1_IP}:5000/track-fraude-worker:latest
 
 curl -s http://${PC1_IP}:5000/v2/track-fraude-worker/tags/list
 ```
+
+> Com `database.backend: postgres` no painel, o worker precisa de `psycopg` na imagem (`pip install -e "./core[postgres]"` no `Dockerfile.worker`). Sem isso, pods falham em poucos segundos com `ModuleNotFoundError: psycopg`.
 
 ---
 
@@ -846,8 +867,11 @@ kubectl get jobs -n track-fraude -w
 # Pod do worker (deve ir para node-01 e ficar Running)
 kubectl get pods -n track-fraude -o wide
 
-# Logs (use o nome do POD, não do Job)
-kubectl logs -n track-fraude -l job-name=<prefixo-do-job> --tail=100 -f
+# Logs (substitua pelo nome do pod, ex.: track-fraude-worker-6fxzg-pb6cc)
+kubectl logs -n track-fraude track-fraude-worker-6fxzg-pb6cc --tail=100
+
+# ou pelo label do job:
+kubectl logs -n track-fraude -l job-name=track-fraude-worker-6fxzg --tail=100
 ```
 
 Sucesso esperado:
@@ -977,11 +1001,12 @@ Checklist manual:
 Repita este guia em cada PC GPU novo:
 
 1. Ubuntu + driver NVIDIA + Container Toolkit
-2. IP fixo + hostname único (`node_02`, etc.)
+2. IP fixo + hostname único (`node-02`, etc.)
 3. `registries.yaml` apontando para o mesmo `PC1_IP:5000`
 4. `k3s agent` com `--node-name` único e o **mesmo** `K3S_TOKEN`
-5. `nvidia-ctk` + restart `k3s-agent`
-6. Validar `kubectl describe node node_02`
+5. Passo 8 (`nvidia-ctk` + symlink 8.1) + restart `k3s-agent`
+6. No **ctrl-p01**: `kubectl label node node-02 track-fraude/gpu=true --overwrite`
+7. Validar `kubectl describe node node-02 | grep nvidia.com/gpu`
 
 **Não** é necessário refazer registry, RabbitMQ, KEDA ou ScaledJob no PC1.
 
@@ -1004,10 +1029,12 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 7. [ ] Token K3s copiado do PC1
 8. [ ] `registries.yaml` no agent
 9. [ ] `k3s agent` join no cluster
-10. [ ] `nvidia-ctk` + restart `k3s-agent`
-11. [ ] Validar `nvidia.com/gpu` no node
-12. [ ] Teste Play → job no `node-01`
-13. [ ] (Opcional) Power Manager no PC1
+10. [ ] `nvidia-ctk` + symlink device-plugins (8.1) + restart `k3s-agent`
+11. [ ] RuntimeClass `nvidia` + label `track-fraude/gpu=true` + device plugin (8.2)
+12. [ ] Validar `nvidia.com/gpu` no node (Passo 9)
+13. [ ] Rebuild/push imagem worker (Passo 9.1)
+14. [ ] Teste Play → job no `node-01` (Passo 10)
+15. [ ] (Opcional) Power Manager no PC1 (Passo 11)
 
 ---
 
@@ -1020,8 +1047,9 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 | [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md)                     | Atlas Platform API                |
 | [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)           | Limpar jobs Pending, logs, delete |
 | `infra/k3s/registries.yaml.example`                                    | Modelo registry para agents       |
-| `infra/k8s/worker-scaledjob.yaml`                                      | Job GPU escalado por KEDA         |
-| `infra/k8s/nvidia-device-plugin.yaml`                                  | Expõe GPUs no cluster             |
+| `infra/k8s/worker-scaledjob.yaml`                                      | Job GPU escalado por KEDA (`runtimeClassName: nvidia`) |
+| `infra/k8s/nvidia-runtime-class.yaml`                                  | RuntimeClass NVIDIA para K3s      |
+| `infra/k8s/nvidia-device-plugin.yaml`                                  | Expõe GPUs no cluster (só nodes com label) |
 | `infra/power-manager/`                                                 | Liga/desliga nodes GPU            |
 | [arquitetura_serverless_on_prem.md](arquitetura_serverless_on_prem.md) | Visão geral                       |
 
@@ -1035,10 +1063,12 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 | ------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `node-01` não aparece em `kubectl get nodes`      | Token errado ou firewall no PC1 (`6443`)   | Refazer join; `curl -k https://PC1_IP:6443/ping`                                                                                 |
 | `nvidia-smi` falha                                | Driver não instalado ou reboot pendente    | Passo 2                                                                                                                          |
-| Sem `nvidia.com/gpu` no node                      | Container Toolkit ou device plugin         | Passos 3, 8, 9                                                                                                                   |
+| Sem `nvidia.com/gpu` no node                      | Toolkit, symlink, RuntimeClass ou label    | Passos 8.1–8.2, 9; label `track-fraude/gpu=true`                                                                                 |
 | Worker `ImagePullBackOff`                         | Registry inacessível                       | `registries.yaml` no node; testar `curl http://PC1_IP:5000/v2/_catalog`                                                          |
 | Worker `Pending` (GPU)                            | Sem GPU alocável no cluster                | `kubectl describe node node-01`; device plugin Running; ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)         |
+| Worker `ContainerCreating` (runtime)            | Falta RuntimeClass `nvidia`                | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml`; worker usa `runtimeClassName: nvidia`                                    |
 | Worker falha ao montar volume / `showmount` trava | Firewall RPC no **ctrl-p01** (não no node) | [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes); `timeout 10 showmount -e PC1_IP` |
+| Worker `Error` (exit rápido, ~5s)                 | Imagem worker sem `psycopg` (Postgres)     | Rebuild com `Dockerfile.worker` atualizado (Passo 9.1); confira logs do pod                     |
 | Worker `Error` (schema Postgres)                  | Imagem worker antiga                       | Rebuild/push `Dockerfile.worker` (Passo 9.1)                                                                                     |
 | Job criado mas não roda no node                   | Node `NotReady` ou sem GPU livre           | `kubectl describe node`; jobs antigos ocupando GPU                                                                               |
 | ScaledJob `READY Unknown`                         | Normal sem fila ou KEDA validando          | Enfileirar job com Play; checar logs do KEDA                                                                                     |
