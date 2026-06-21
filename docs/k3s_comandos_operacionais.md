@@ -242,6 +242,31 @@ track-fraude-worker-xxxxx-yyyyy   0/1   Pending
 
 **Não é necessário** derrubar `track-fraude-server` nem `atlas-platform-api`.
 
+### Painel / `:30080` timeout (curl exit 28) com pod Running
+
+**Sintoma:** logs do painel ok (`Uvicorn running`), mas `curl http://127.0.0.1:30080/health` trava; endpoints apontam IP `10.42.1.x` (node GPU) em vez de `10.42.0.x` (ctrl-p01).
+
+**Causa:** Deployment sem `nodeAffinity` — após restart o pod pode subir no **node-01**. Com rede pod-to-pod quebrada (`CIDRAssignmentFailed` no node), NodePort no ctrl-p01 não alcança o pod.
+
+**Correção:**
+
+```bash
+cd ~/track_fraude
+git pull
+kubectl apply -f infra/k8s/server-deployment.yaml
+kubectl apply -f infra/k8s/atlas-platform-api.yaml
+kubectl rollout restart deployment/track-fraude-server deployment/atlas-platform-api -n track-fraude
+kubectl get pods -n track-fraude -o wide   # NODE deve ser ctrlp01 / ctrl-p01
+curl -m 5 http://127.0.0.1:30080/health
+```
+
+**Workaround imediato (sem git):**
+
+```bash
+kubectl port-forward -n track-fraude svc/track-fraude-server 8080:8080
+# outro terminal: curl http://127.0.0.1:8080/login
+```
+
 ### Play enfileirou mas painel trava em "em execução"
 
 **Sintoma:** log mostra `atlas_job:` e `pipeline retirado da fila`, mas o console não avança; `atlas.jobs` fica `queued`; muitos jobs `Failed`/`Complete` no KEDA.

@@ -13,6 +13,16 @@ spec:
       labels:
         app: atlas-platform-api
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
       containers:
         - name: api
           image: 192.168.0.199:5000/atlas-platform-api:latest

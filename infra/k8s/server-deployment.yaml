@@ -13,6 +13,17 @@ spec:
       labels:
         app: track-fraude-server
     spec:
+      # Painel + NFS/Postgres no ctrl-p01 — evita pod em node GPU (NodePort quebra entre nodes)
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
       containers:
         - name: server
           image: 192.168.0.199:5000/track-fraude-server:latest
