@@ -63,7 +63,6 @@ def run_command_with_cancel(
         "env": env,
         "stdout": stdout,
         "stderr": subprocess.STDOUT,
-        "check": False,
     }
     if sys.platform != "win32":
         kwargs["start_new_session"] = True
