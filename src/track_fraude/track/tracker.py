@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from track_fraude.models.sync import SyncMap
+from track_fraude.yolo_device import resolve_yolo_device
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ def run_tracking(
     from ultralytics import YOLO
 
     cfg = config or TrackRunConfig()
+    device = resolve_yolo_device()
     model = YOLO(cfg.model_name)
 
     rows: list[dict[str, Any]] = []
@@ -60,6 +62,7 @@ def run_tracking(
         conf=cfg.conf,
         classes=[cfg.person_class],
         tracker=cfg.tracker,
+        device=device,
         verbose=False,
     )
 

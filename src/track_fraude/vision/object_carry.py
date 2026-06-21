@@ -15,6 +15,9 @@ CARRY_CLASS_IDS: dict[int, str] = {
 }
 
 
+from track_fraude.yolo_device import resolve_yolo_device
+
+
 def _require_ultralytics():
     try:
         from ultralytics import YOLO  # noqa: F401
@@ -96,6 +99,7 @@ def detect_carry_objects(
         frame,
         conf=conf,
         classes=list(CARRY_CLASS_IDS.keys()),
+        device=resolve_yolo_device(),
         verbose=False,
     )
     labels: list[str] = []
