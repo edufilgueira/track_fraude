@@ -6,7 +6,7 @@ Neste cenário:
 
 - O **control plane** já está pronto (`ctrl-p01` / `PC1_IP`) — veja [config_control_plane.md](config_control_plane.md).
 - **Fase 0 + Fase 1** concluídas no PC1: Postgres, Atlas Platform API, painel enfileirando via API — [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md).
-- Este guia configura **`node-01`**, que entra no cluster como **K3s agent** e processa pipelines via container `track-fraude-worker`.
+- Este guia configura `**node-01`**, que entra no cluster como **K3s agent** e processa pipelines via container `track-fraude-worker`.
 - Você **não** instala Python, Ultralytics ou worker `.venv` no host — tudo roda na imagem Docker puxada do registry do PC1.
 
 **Sistema alvo:** Ubuntu Server (somente terminal, sem interface gráfica).
@@ -15,12 +15,14 @@ Neste cenário:
 
 ## O que este node faz
 
-| Função | O que roda aqui |
-|--------|-----------------|
-| Processamento GPU | Jobs KEDA → `track-fraude-worker` (1 GPU por job) |
-| Orquestração | K3s **agent** conectado ao `ctrl-p01` |
-| Dados | Monta o mesmo NFS do PC1 (`/srv/track_fraude/data`) dentro dos pods |
-| Imagens | Puxa `track-fraude-worker` do registry `PC1_IP:5000` |
+
+| Função            | O que roda aqui                                                     |
+| ----------------- | ------------------------------------------------------------------- |
+| Processamento GPU | Jobs KEDA → `track-fraude-worker` (1 GPU por job)                   |
+| Orquestração      | K3s **agent** conectado ao `ctrl-p01`                               |
+| Dados             | Monta o mesmo NFS do PC1 (`/srv/track_fraude/data`) dentro dos pods |
+| Imagens           | Puxa `track-fraude-worker` do registry `PC1_IP:5000`                |
+
 
 **Este node não roda:** painel, RabbitMQ, Postgres, registry ou KEDA (isso fica no control plane).
 
@@ -30,19 +32,21 @@ Neste cenário:
 
 Antes de ligar o `node-01`, confirme no PC1:
 
-| Item | Como verificar |
-|------|----------------|
-| K3s server `Ready` | `kubectl get nodes` no PC1 |
-| Registry com imagens | `curl -s http://PC1_IP:5000/v2/_catalog` → server, worker, **atlas-platform-api** |
-| RabbitMQ no ar | `docker compose -f docker-compose.infra.yml ps` |
-| Postgres + schema `atlas.*` | `python tools/apply_atlas_schema.py` (se ainda não rodou) |
-| NFS export ativo | `showmount -e localhost` → `/srv/track_fraude/data` |
-| KEDA instalado | `kubectl get pods -n keda` |
-| ScaledJob criado | `kubectl get scaledjob -n track-fraude` |
-| NVIDIA Device Plugin | `kubectl get ds -n kube-system nvidia-device-plugin-daemonset` |
-| Atlas Platform API | `curl -s http://127.0.0.1:30090/v1/health` → `ok` |
-| Painel + Atlas no ConfigMap | `grep -E 'mode: queue|api_url' infra/k8s/app-config.yaml` |
-| Verificação Fase 1 | `python tools/verify_fase1.py --api-url http://127.0.0.1:30090` |
+
+| Item                        | Como verificar                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| K3s server `Ready`          | `kubectl get nodes` no PC1                                                        |
+| Registry com imagens        | `curl -s http://PC1_IP:5000/v2/_catalog` → server, worker, **atlas-platform-api** |
+| RabbitMQ no ar              | `docker compose -f docker-compose.infra.yml ps`                                   |
+| Postgres + schema `atlas.`* | `python tools/apply_atlas_schema.py` (se ainda não rodou)                         |
+| NFS export ativo            | `showmount -e localhost` → `/srv/track_fraude/data`                               |
+| KEDA instalado              | `kubectl get pods -n keda`                                                        |
+| ScaledJob criado            | `kubectl get scaledjob -n track-fraude`                                           |
+| NVIDIA Device Plugin        | `kubectl get ds -n kube-system nvidia-device-plugin-daemonset`                    |
+| Atlas Platform API          | `curl -s http://127.0.0.1:30090/v1/health` → `ok`                                 |
+| Painel + Atlas no ConfigMap | `grep -E 'mode: queue                                                             |
+| Verificação Fase 1          | `python tools/verify_fase1.py --api-url http://127.0.0.1:30090`                   |
+
 
 Opcional antes do primeiro Play com GPU: limpar jobs worker antigos em Pending (sem GPU):
 
@@ -58,15 +62,17 @@ Ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md).
 
 Preencha estes valores:
 
-| Variável | Exemplo | Seu valor |
-|----------|---------|-----------|
-| `PC1_IP` | `192.168.0.199` | ______________ |
-| `NODE01_IP` | `192.168.0.201` | ______________ |
-| `NODE01_HOSTNAME` | `node-01` | ______________ |
-| `NODE01_DNS` | `node-01` | ______________ |
-| `NODE01_MAC` | `AA:BB:CC:DD:EE:01` | ______________ |
-| `USUARIO` | `eduardo` | ______________ |
-| `K3S_TOKEN` | (copiar do PC1) | ______________ |
+
+| Variável          | Exemplo             | Seu valor      |
+| ----------------- | ------------------- | -------------- |
+| `PC1_IP`          | `192.168.0.199`     | ______________ |
+| `NODE01_IP`       | `192.168.0.201`     | ______________ |
+| `NODE01_HOSTNAME` | `node-01`           | ______________ |
+| `NODE01_DNS`      | `node-01`           | ______________ |
+| `NODE01_MAC`      | `AA:BB:CC:DD:EE:01` | ______________ |
+| `USUARIO`         | `eduardo`           | ______________ |
+| `K3S_TOKEN`       | (copiar do PC1)     | ______________ |
+
 
 Requisitos de hardware sugeridos:
 
@@ -162,10 +168,12 @@ ip a
 
 Configure os mesmos nomes do [config_control_plane.md](config_control_plane.md) (Passo 0.1) neste PC e no seu notebook.
 
-| Nome (SSH) | IP | Este node |
-|------------|-----|-----------|
+
+| Nome (SSH) | IP              | Este node     |
+| ---------- | --------------- | ------------- |
 | `ctrl-p01` | `192.168.0.199` | control plane |
 | `node-01`  | `192.168.0.201` | **este guia** |
+
 
 No `node-01`:
 
@@ -192,6 +200,18 @@ ssh ${USUARIO}@node-01
 ### Power Manager (opcional)
 
 Só necessário se quiser **ligar/desligar este node automaticamente** (Wake-on-LAN + SSH). Pule se o node ficará sempre ligado.
+
+**Quando fazer cada parte** (evita confusão de ordem):
+
+
+| Momento                                                         | O que fazer                                                          | Onde                                          |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| Agora (Passo 0.1)                                               | Coletar MAC/`ssh_user`, criar `config.json`, `/etc/hosts`, chave SSH | A–D abaixo                                    |
+| Depois do [Passo 7](#passo-7--entrar-no-cluster-como-k3s-agent) | Validar `"name"` com `kubectl get nodes`                             | Seção no Passo 7                              |
+| Depois (ou no fim)                                              | Subir o serviço Power Manager                                        | [Passo 11](#passo-11--power-manager-opcional) |
+
+
+> **Não rode `kubectl get nodes` aqui** — o node só aparece no cluster **depois** do Passo 7. Se fizer agora, verá só o control plane.
 
 O arquivo de configuração fica **no ctrl-p01**, não neste PC:
 
@@ -230,10 +250,12 @@ Exemplo de saída:
     link/ether 84:9e:56:03:68:13 brd ff:ff:ff:ff:ff:ff
 ```
 
-| Interface | Usar no Power Manager? |
-|-----------|------------------------|
+
+| Interface                                 | Usar no Power Manager?                 |
+| ----------------------------------------- | -------------------------------------- |
 | `enp…` / `eth0` com `UP` e cabo conectado | **Sim** → `"mac": "34:5a:60:7b:86:77"` |
-| `wlp…` (Wi‑Fi) | **Não** — não acorda PC desligado |
+| `wlp…` (Wi‑Fi)                            | **Não** — não acorda PC desligado      |
+
 
 Confirme qual é a interface cabeada (troque `enp12s0` pelo nome real):
 
@@ -258,19 +280,35 @@ sudo nmcli radio wifi off
 
 **4. Anote estes valores**
 
-| Campo | Valor neste guia | Seu valor |
-|-------|------------------|-----------|
-| `name` | `node-01` | ______________ |
-| `ssh_host` | `node-01` (igual ao `name`) | ______________ |
-| `ssh_user` | saída do `whoami` | ______________ |
-| `mac` | MAC da Ethernet (`enp…`) | ______________ |
+
+| Campo       | Valor neste guia                     | Seu valor      |
+| ----------- | ------------------------------------ | -------------- |
+| `name`      | `node-01`                            | ______________ |
+| `ssh_host`  | `node-01` (igual ao `name`)          | ______________ |
+| `ssh_user`  | saída do `whoami`                    | ______________ |
+| `mac`       | MAC da Ethernet (`enp…`)             | ______________ |
 | `broadcast` | `192.168.0.255` (LAN 192.168.0.0/24) | ______________ |
+
 
 > `name` e `ssh_host` devem ser **iguais** ao hostname deste PC (`node-01`) e ao nome que aparecerá em `kubectl get nodes` após o Passo 7.
 
-#### B — Editar `config.json` no ctrl-p01
+#### B — Ir para o ctrl-p01 e editar `config.json`
 
-No **ctrl-p01** (SSH ou terminal local):
+Até aqui você estava executando comandos no **node-01**. Agora mude para o **ctrl-p01**, porque o Power Manager roda no control plane.
+
+Se você está conectado por SSH no `node-01`, saia:
+
+```bash
+exit
+```
+
+Entre no **ctrl-p01** (ou abra um terminal local nele):
+
+```bash
+ssh eduardo@ctrl-p01
+```
+
+Todos os comandos abaixo são no **ctrl-p01**.
 
 ```bash
 cd ~/track_fraude
@@ -297,36 +335,53 @@ Preencha o bloco `nodes[]` com os valores anotados no passo A:
 ]
 ```
 
-Confirme que `name` bate com o cluster **depois** do Passo 7 (entrar no K3s):
+#### C — Garantir que `node-01` resolve no ctrl-p01
 
-```bash
-# No ctrl-p01
-kubectl get nodes
-# A coluna NAME deve ser node-01 — igual ao "name" no JSON
-```
-
-**SSH sem senha (obrigatório para desligar o node)**
-
-O script não digita senha. No **ctrl-p01**:
-
-```bash
-ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519   # se ainda não tiver chave
-ssh-copy-id eduardo@node-01                         # troque eduardo pelo seu ssh_user
-
-# Teste
-ssh eduardo@node-01 'echo ok'
-```
-
-**`/etc/hosts` no ctrl-p01** (se ainda não fez no [Passo 0.1 do control plane](config_control_plane.md)):
+Ainda no **ctrl-p01**, confirme que o nome `node-01` aponta para o IP do GPU node:
 
 ```bash
 grep node-01 /etc/hosts
+# esperado:
 # 192.168.0.201   node-01
 ```
 
-Sem essa linha, `ssh_host: "node-01"` não resolve.
+Se não aparecer essa linha, adicione:
 
-Para **subir o serviço** (teste manual ou systemd), veja o [Passo 11](#passo-11--power-manager-opcional).
+```bash
+echo "192.168.0.201   node-01" | sudo tee -a /etc/hosts
+```
+
+Teste o nome:
+
+```bash
+ping -c1 node-01
+```
+
+Sem isso, `ssh_host: "node-01"` não resolve quando o Power Manager tentar desligar o node.
+
+#### D — Configurar SSH sem senha do ctrl-p01 para o node-01
+
+O Power Manager roda no **ctrl-p01** e não digita senha. Por isso o ctrl-p01 precisa conseguir entrar no `node-01` por chave SSH.
+
+Ainda no **ctrl-p01**:
+
+```bash
+# Gere uma chave se ainda não existir
+test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+
+# Copie a chave para o node-01 (troque eduardo pelo seu ssh_user)
+ssh-copy-id eduardo@node-01
+
+# Teste: este comando deve responder "ok" sem pedir senha
+ssh eduardo@node-01 'echo ok'
+```
+
+Se `ssh eduardo@node-01` não funcionar, o Power Manager também não conseguirá desligar o node.
+
+Próximos passos do Power Manager ( **não** faça agora):
+
+1. [Passo 7](#passo-7--entrar-no-cluster-como-k3s-agent) — entrar no K3s e validar `"name"` no `config.json`
+2. [Passo 11](#passo-11--power-manager-opcional) — subir o serviço
 
 > Manifests Kubernetes no PC1 podem continuar com IP literal (`192.168.0.199`). Nomes locais (`ctrl-p01`, `node-01`) são para SSH, browser e Power Manager.
 
@@ -349,11 +404,11 @@ O node **não** expõe painel nem registry. O tráfego principal é:
 - **Saída** para `PC1_IP:5000` (registry)
 - **Saída** para `PC1_IP:2049` (NFS)
 
-No **PC1**, confirme que a rede dos nodes pode montar NFS (já configurado no guia do control plane):
+No **ctrl-p01**, confirme que a rede dos nodes pode montar NFS (Passo 2.1 do [config_control_plane.md](config_control_plane.md)):
 
 ```bash
-# No ctrl-p01 — porta 2049 liberada para a LAN
-sudo ufw status | grep 2049
+# No ctrl-p01 — portas NFS liberadas para a LAN
+sudo ufw status | grep -E '111|2049|32768'
 ```
 
 ---
@@ -411,22 +466,45 @@ sudo apt install -y nvidia-container-toolkit
 
 ## Passo 4 — Cliente NFS (teste de conectividade)
 
-O worker monta `data/` via volume NFS do Kubernetes. O node precisa alcançar o export do PC1.
+O worker monta `data/` via volume NFS do Kubernetes. O node precisa alcançar o export do **ctrl-p01**.
+
+> Firewall e export NFS ficam no **ctrl-p01** (Passo 2.1 de [config_control_plane.md](config_control_plane.md)). **Não** instale `nfs-server` no GPU node — aqui você só testa como **cliente**.
 
 Substitua `PC1_IP`:
 
 ```bash
 PC1_IP=192.168.0.199
 
-showmount -e ${PC1_IP}
-sudo mkdir -p /srv/track_fraude/data
-sudo mount -t nfs ${PC1_IP}:/srv/track_fraude/data /srv/track_fraude/data
-ls -la /srv/track_fraude/data
-sudo umount /srv/track_fraude/data
+# Rede básica
+ping -c3 ${PC1_IP}
+
+# rpcbind (porta 111) — se falhar, firewall no ctrl-p01
+timeout 5 bash -c "echo > /dev/tcp/${PC1_IP}/111" && echo "111 OK" || echo "111 FALHOU"
+
+# Lista exports (use timeout — trava se mountd estiver bloqueado no ctrl-p01)
+timeout 10 showmount -e ${PC1_IP}
 ```
 
-- `showmount` lista o export
+Esperado:
+
+```text
+Export list for 192.168.0.199:
+/srv/track_fraude/data 192.168.0.0/24
+```
+
+Mount manual de teste:
+
+```bash
+sudo mkdir -p /mnt/nfs-test
+sudo mount -t nfs ${PC1_IP}:/srv/track_fraude/data /mnt/nfs-test
+ls -la /mnt/nfs-test
+sudo umount /mnt/nfs-test
+```
+
+- `showmount` responde em poucos segundos (não trava)
 - `mount` funciona sem erro
+
+**Se `showmount` travar:** no **ctrl-p01**, abra portas RPC — [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes). Não configure ufw/NFS no GPU node para corrigir isso.
 
 > Esse mount manual é só teste. Em produção, quem monta nos workers é o **kubelet** ao subir o pod.
 
@@ -512,17 +590,48 @@ Esperado:
 
 ```text
 NAME      STATUS   ROLES                  AGE   VERSION
-ctrl-p01   Ready    control-plane,master   ...   v1.x.x+k3s
-node-01   Ready    <none>                 ...   v1.x.x+k3s
+ctrlp01   Ready    control-plane            ...   v1.x.x+k3s
+node-01   Ready    <none>                   ...   v1.x.x+k3s
 ```
+
+### Validar Power Manager (se configurou no Passo 0.1)
+
+Só faça isto **agora**, depois que `node-01` aparecer acima.
+
+No **ctrl-p01**, confirme que o `"name"` no `config.json` bate com a coluna `NAME`:
+
+```bash
+kubectl get nodes
+grep '"name"' ~/track_fraude/infra/power-manager/config.json
+```
+
+Deve ser o mesmo valor (ex.: `node-01`). Se no JSON estiver diferente, edite:
+
+```bash
+nano ~/track_fraude/infra/power-manager/config.json
+```
+
+```json
+"name": "node-01",
+"ssh_host": "node-01"
+```
+
+Se `kubectl get nodes` mostrar outro nome, corrija o JSON **ou** refaça o join no node-01 com `K3S_NODE_NAME=node-01`.
+
+Para **subir o serviço** Power Manager, continue no [Passo 11](#passo-11--power-manager-opcional).
 
 ---
 
 ## Passo 8 — GPU no containerd do K3s
 
+**Onde:** todos os comandos abaixo rodam no **`node-01`** (GPU node), não no ctrl-p01.
+
+Pré-requisito: Passo 3 concluído (`nvidia-ctk` instalado) e `nvidia-smi` funcionando.
+
 Configure o runtime NVIDIA no containerd usado pelo K3s agent:
 
 ```bash
+# No node-01
 sudo nvidia-ctk runtime configure \
   --runtime=containerd \
   --config /var/lib/rancher/k3s/agent/etc/containerd/config.toml
@@ -530,24 +639,54 @@ sudo nvidia-ctk runtime configure \
 sudo systemctl restart k3s-agent
 ```
 
-Valide que o runtime enxerga a GPU:
+Valide no **node-01**:
 
 ```bash
 sudo k3s crictl info | grep -i nvidia
 ```
 
+Deve aparecer referência a `nvidia` na saída. Se `nvidia-ctk: command not found`, volte ao Passo 3.
+
 ---
 
-## Passo 9 — Validar GPU no cluster (no `ctrl-p01`)
+## Passo 9 — Validar GPU no cluster
 
-O NVIDIA Device Plugin já foi aplicado no control plane. Após o `node-01` entrar, confira:
+Este passo tem duas partes em máquinas diferentes.
+
+### A — Pré-requisito no `node-01` (antes de validar no cluster)
+
+Confirme no **node-01**:
 
 ```bash
+nvidia-smi
+sudo k3s crictl info | grep -i nvidia
+sudo systemctl status k3s-agent --no-pager
+```
+
+Se algo falhar, corrija os Passos 2, 3 ou 8 **no node-01** antes de continuar.
+
+### B — Validar no `ctrl-p01`
+
+Saia do node-01 se estiver conectado por SSH (`exit`) e entre no **ctrl-p01**:
+
+```bash
+ssh eduardo@ctrl-p01
+cd ~/track_fraude
+```
+
+Todos os comandos abaixo são no **ctrl-p01** (usa `kubectl` contra o cluster):
+
+```bash
+# Plugin rodando em cada node?
 kubectl get pods -n kube-system -l name=nvidia-device-plugin-ds -o wide
+
+# GPU registrada no node-01?
 kubectl describe node node-01 | grep -A6 "nvidia.com/gpu"
 ```
 
-Esperado em `Capacity` e `Allocatable`:
+Esperado na coluna `NODE` do primeiro comando: um pod **Running** em `node-01`.
+
+Esperado no segundo comando (`Capacity` / `Allocatable`):
 
 ```text
 nvidia.com/gpu:  1
@@ -555,12 +694,50 @@ nvidia.com/gpu:  1
 
 (ou `2`, se a máquina tiver duas GPUs)
 
-Se o plugin não estiver Running no `node-01`:
+> O plugin também roda no `ctrlp01` — normal. O control plane **não** precisa ter GPU; o que importa é o pod **Running no `node-01`** e `nvidia.com/gpu` visível em `kubectl describe node node-01`.
+
+### C — Se `nvidia.com/gpu` não aparecer
+
+Se `nvidia-smi` e o Passo 8 estão OK no node-01, mas `kubectl describe node node-01` não mostra GPU, a causa mais comum no **K3s** é o device plugin escrevendo o socket no caminho errado (`/var/lib/kubelet/...` em vez de `/var/lib/rancher/k3s/agent/kubelet/device-plugins`).
+
+**No node-01**, confira se o socket NVIDIA existe:
 
 ```bash
+ls -la /var/lib/rancher/k3s/agent/kubelet/device-plugins/
+# esperado após plugin OK: nvidia-gpu.sock
+```
+
+**No ctrl-p01**, reaplique o manifest corrigido e reinicie o plugin:
+
+```bash
+cd ~/track_fraude
+git pull   # traz infra/k8s/nvidia-device-plugin.yaml com path K3s
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
+kubectl delete pod -n kube-system -l name=nvidia-device-plugin-ds --field-selector spec.nodeName=node-01
 ```
+
+Aguarde ~30s e valide:
+
+```bash
+kubectl describe node node-01 | grep -A6 "nvidia.com/gpu"
+kubectl logs -n kube-system -l name=nvidia-device-plugin-ds --field-selector spec.nodeName=node-01 --tail=30
+```
+
+Se ainda falhar:
+
+1. **No node-01:** refaça o Passo 8 e reinicie o agent (`sudo systemctl restart k3s-agent`).
+2. **No node-01**, tente runtime NVIDIA como padrão:
+
+```bash
+sudo nvidia-ctk runtime configure \
+  --runtime=containerd \
+  --config /var/lib/rancher/k3s/agent/etc/containerd/config.toml \
+  --set-as-default
+sudo systemctl restart k3s-agent
+```
+
+3. **No ctrl-p01**, reinicie o pod do plugin no node-01 de novo.
 
 ---
 
@@ -638,7 +815,12 @@ Capacidade:
 
 ## Passo 11 — Power Manager (opcional)
 
-Continuação do [Passo 0.1 — Power Manager](#power-manager-opcional): assume que `~/track_fraude/infra/power-manager/config.json` já foi criado e preenchido no ctrl-p01.
+Continuação do [Passo 0.1 — Power Manager](#power-manager-opcional).
+
+**Pré-requisitos:**
+
+- `config.json` criado nos passos A–D do Passo 0.1
+- Node no cluster ([Passo 7](#passo-7--entrar-no-cluster-como-k3s-agent)) com `"name"` validado
 
 Automatiza **ligar** (Wake-on-LAN) e **desligar** (SSH) nodes GPU conforme a fila RabbitMQ e pods pendentes. Roda **somente no ctrl-p01**.
 
@@ -646,29 +828,35 @@ Automatiza **ligar** (Wake-on-LAN) e **desligar** (SSH) nodes GPU conforme a fil
 
 ### O que o script faz
 
-| Evento | Ação | Como |
-|--------|------|------|
-| Fila com jobs, node offline, sem GPU livre | **Ligar** node | Magic packet Wake-on-LAN (campo `mac`) |
+
+| Evento                                         | Ação              | Como                                         |
+| ---------------------------------------------- | ----------------- | -------------------------------------------- |
+| Fila com jobs, node offline, sem GPU livre     | **Ligar** node    | Magic packet Wake-on-LAN (campo `mac`)       |
 | Node online, fila vazia, ocioso por N segundos | **Desligar** node | `kubectl drain` + SSH `sudo shutdown -h now` |
+
 
 Política `total_on_sec` (rodízio de tempo ligado):
 
-| Ação | Regra |
-|------|--------|
+
+| Ação        | Regra                                             |
+| ----------- | ------------------------------------------------- |
 | Wake-on-LAN | Node offline com **menor** tempo acumulado ligado |
-| Shutdown | Node ocioso com **maior** tempo acumulado ligado |
+| Shutdown    | Node ocioso com **maior** tempo acumulado ligado  |
+
 
 Código: `infra/power-manager/power_manager.py`.
 
 ### Referência rápida — campos do `config.json`
 
-| Campo | Onde obter | Regra |
-|-------|------------|-------|
-| **`name`** | `kubectl get nodes` no ctrl-p01 | Idêntico à coluna `NAME` (ex.: `node-01`) |
-| **`ssh_host`** | Passo 0.1 | Igual ao `name` neste guia; resolve via `/etc/hosts` no ctrl-p01 |
-| **`mac`** | `ip link show` / `cat /sys/class/net/enp…/address` no node | Ethernet com cabo — **não** Wi‑Fi |
-| **`broadcast`** | Sub-rede LAN | `192.168.0.255` para `192.168.0.0/24` |
-| **`ssh_user`** | `whoami` no node | Usuário do `ssh-copy-id` |
+
+| Campo           | Onde obter                                                 | Regra                                                            |
+| --------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| `**name`**      | `kubectl get nodes` no ctrl-p01                            | Idêntico à coluna `NAME` (ex.: `node-01`)                        |
+| `**ssh_host**`  | Passo 0.1                                                  | Igual ao `name` neste guia; resolve via `/etc/hosts` no ctrl-p01 |
+| `**mac**`       | `ip link show` / `cat /sys/class/net/enp…/address` no node | Ethernet com cabo — **não** Wi‑Fi                                |
+| `**broadcast`** | Sub-rede LAN                                               | `192.168.0.255` para `192.168.0.0/24`                            |
+| `**ssh_user**`  | `whoami` no node                                           | Usuário do `ssh-copy-id`                                         |
+
 
 Passo a passo com comandos: [Passo 0.1 — Power Manager](#power-manager-opcional).
 
@@ -690,13 +878,15 @@ Para rodar sempre ligado no ctrl-p01, siga o **Passo 14** do [config_control_pla
 
 ### Problemas comuns
 
-| Sintoma | Causa | Ação |
-|---------|-------|------|
-| Node nunca acorda | MAC errado ou Wi‑Fi em vez de Ethernet | MAC da interface cabeada; WOL na BIOS; cabo conectado |
-| Node nunca desliga | `name` ≠ `kubectl get nodes` | Corrigir `"name": "node-01"` |
-| Shutdown falha | SSH pede senha | `ssh-copy-id` do ctrl-p01 para o node |
-| `kubectl drain` falha | Nome errado em `name` | Conferir `NAME` em `kubectl get nodes` |
-| Script não vê fila | `rabbitmq_api_url` errada | Usar `http://192.168.0.199:15672/...` ou IP do ctrl-p01 |
+
+| Sintoma               | Causa                                  | Ação                                                    |
+| --------------------- | -------------------------------------- | ------------------------------------------------------- |
+| Node nunca acorda     | MAC errado ou Wi‑Fi em vez de Ethernet | MAC da interface cabeada; WOL na BIOS; cabo conectado   |
+| Node nunca desliga    | `name` ≠ `kubectl get nodes`           | Corrigir `"name": "node-01"`                            |
+| Shutdown falha        | SSH pede senha                         | `ssh-copy-id` do ctrl-p01 para o node                   |
+| `kubectl drain` falha | Nome errado em `name`                  | Conferir `NAME` em `kubectl get nodes`                  |
+| Script não vê fila    | `rabbitmq_api_url` errada              | Usar `http://192.168.0.199:15672/...` ou IP do ctrl-p01 |
+
 
 ---
 
@@ -717,13 +907,13 @@ curl -s http://127.0.0.1:30080/health
 
 Checklist manual:
 
-- [ ] `node-01` aparece `Ready` em `kubectl get nodes`
-- [ ] `nvidia-smi` funciona no `node-01`
-- [ ] `nvidia.com/gpu` visível em `kubectl describe node node-01`
-- [ ] `showmount -e PC1_IP` funciona no `node-01`
-- [ ] Play no painel mostra `atlas_job:` no log
-- [ ] Job worker **Running** no `node-01` (não Pending)
-- [ ] Logs do worker progridem sem `ImagePullBackOff` nem erro de NFS/schema
+- `node-01` aparece `Ready` em `kubectl get nodes`
+- `nvidia-smi` funciona no `node-01`
+- `nvidia.com/gpu` visível em `kubectl describe node node-01`
+- `showmount -e PC1_IP` funciona no `node-01`
+- Play no painel mostra `atlas_job:` no log
+- Job worker **Running** no `node-01` (não Pending)
+- Logs do worker progridem sem `ImagePullBackOff` nem erro de NFS/schema
 
 ---
 
@@ -768,34 +958,38 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 
 ## Referências no repositório
 
-| Arquivo | Uso |
-|---------|-----|
-| [config_control_plane.md](config_control_plane.md) | Setup do `ctrl-p01` |
-| [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md) | Atlas Platform API |
-| [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) | Limpar jobs Pending, logs, delete |
-| `infra/k3s/registries.yaml.example` | Modelo registry para agents |
-| `infra/k8s/worker-scaledjob.yaml` | Job GPU escalado por KEDA |
-| `infra/k8s/nvidia-device-plugin.yaml` | Expõe GPUs no cluster |
-| `infra/power-manager/` | Liga/desliga nodes GPU |
-| [arquitetura_serverless_on_prem.md](arquitetura_serverless_on_prem.md) | Visão geral |
+
+| Arquivo                                                                | Uso                               |
+| ---------------------------------------------------------------------- | --------------------------------- |
+| [config_control_plane.md](config_control_plane.md)                     | Setup do `ctrl-p01`               |
+| [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md)                     | Atlas Platform API                |
+| [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)           | Limpar jobs Pending, logs, delete |
+| `infra/k3s/registries.yaml.example`                                    | Modelo registry para agents       |
+| `infra/k8s/worker-scaledjob.yaml`                                      | Job GPU escalado por KEDA         |
+| `infra/k8s/nvidia-device-plugin.yaml`                                  | Expõe GPUs no cluster             |
+| `infra/power-manager/`                                                 | Liga/desliga nodes GPU            |
+| [arquitetura_serverless_on_prem.md](arquitetura_serverless_on_prem.md) | Visão geral                       |
+
 
 ---
 
 ## Problemas comuns
 
-| Sintoma | Causa provável | Ação |
-|---------|----------------|------|
-| `node-01` não aparece em `kubectl get nodes` | Token errado ou firewall no PC1 (`6443`) | Refazer join; `curl -k https://PC1_IP:6443/ping` |
-| `nvidia-smi` falha | Driver não instalado ou reboot pendente | Passo 2 |
-| Sem `nvidia.com/gpu` no node | Container Toolkit ou device plugin | Passos 3, 8, 9 |
-| Worker `ImagePullBackOff` | Registry inacessível | `registries.yaml` no node; testar `curl http://PC1_IP:5000/v2/_catalog` |
-| Worker `Pending` (GPU) | Sem GPU alocável no cluster | `kubectl describe node node-01`; device plugin Running; ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md) |
-| Worker falha ao montar volume | NFS bloqueado | `showmount -e PC1_IP`; ufw porta 2049 no PC1 |
-| Worker `Error` (schema Postgres) | Imagem worker antiga | Rebuild/push `Dockerfile.worker` (Passo 9.1) |
-| Job criado mas não roda no node | Node `NotReady` ou sem GPU livre | `kubectl describe node`; jobs antigos ocupando GPU |
-| ScaledJob `READY Unknown` | Normal sem fila ou KEDA validando | Enfileirar job com Play; checar logs do KEDA |
-| Play não enfileira | Atlas API down ou config errada | `curl :30090/v1/health`; `atlas.api_url` no ConfigMap; logs `atlas-platform-api` |
-| Play sem `atlas_job` no log | Painel sem rebuild ou ConfigMap antigo | Rebuild server + `kubectl apply app-config.yaml` |
+
+| Sintoma                                           | Causa provável                             | Ação                                                                                                                             |
+| ------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `node-01` não aparece em `kubectl get nodes`      | Token errado ou firewall no PC1 (`6443`)   | Refazer join; `curl -k https://PC1_IP:6443/ping`                                                                                 |
+| `nvidia-smi` falha                                | Driver não instalado ou reboot pendente    | Passo 2                                                                                                                          |
+| Sem `nvidia.com/gpu` no node                      | Container Toolkit ou device plugin         | Passos 3, 8, 9                                                                                                                   |
+| Worker `ImagePullBackOff`                         | Registry inacessível                       | `registries.yaml` no node; testar `curl http://PC1_IP:5000/v2/_catalog`                                                          |
+| Worker `Pending` (GPU)                            | Sem GPU alocável no cluster                | `kubectl describe node node-01`; device plugin Running; ver [k3s_comandos_operacionais.md](k3s_comandos_operacionais.md)         |
+| Worker falha ao montar volume / `showmount` trava | Firewall RPC no **ctrl-p01** (não no node) | [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes); `timeout 10 showmount -e PC1_IP` |
+| Worker `Error` (schema Postgres)                  | Imagem worker antiga                       | Rebuild/push `Dockerfile.worker` (Passo 9.1)                                                                                     |
+| Job criado mas não roda no node                   | Node `NotReady` ou sem GPU livre           | `kubectl describe node`; jobs antigos ocupando GPU                                                                               |
+| ScaledJob `READY Unknown`                         | Normal sem fila ou KEDA validando          | Enfileirar job com Play; checar logs do KEDA                                                                                     |
+| Play não enfileira                                | Atlas API down ou config errada            | `curl :30090/v1/health`; `atlas.api_url` no ConfigMap; logs `atlas-platform-api`                                                 |
+| Play sem `atlas_job` no log                       | Painel sem rebuild ou ConfigMap antigo     | Rebuild server + `kubectl apply app-config.yaml`                                                                                 |
+
 
 ---
 
@@ -818,3 +1012,4 @@ Quando tudo estiver certo:
 ```text
 Play no painel → Atlas Platform API → RabbitMQ → KEDA → Job no node-01 → GPU → NFS → status no banco
 ```
+

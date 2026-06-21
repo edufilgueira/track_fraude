@@ -218,7 +218,11 @@ sudo ufw allow 5672/tcp    # rabbitmq
 sudo ufw allow 15672/tcp   # rabbitmq management
 sudo ufw allow 5432/tcp    # postgres (só rede interna se possível)
 sudo ufw allow 6443/tcp    # k3s api
-sudo ufw allow from 192.168.0.0/24 to any port 2049 proto tcp  # NFS
+# NFS — rpcbind (111), nfsd (2049) e mountd (portas RPC dinâmicas ou 20048 fixa)
+sudo ufw allow from 192.168.0.0/24 to any port 111
+sudo ufw allow from 192.168.0.0/24 to any port 2049
+sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto tcp
+sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto udp
 sudo ufw enable
 ```
 
@@ -252,6 +256,39 @@ ls -la /srv/track_fraude/data
 
 - NFS export ativo
 - Pastas `raw`, `processed`, `logs`, `pos` existem
+
+### 2.1 — Firewall NFS para GPU nodes
+
+`showmount` e mounts NFSv3 usam **RPC**, não só a porta 2049. Se o ufw liberar apenas 2049, GPU nodes veem `showmount -e PC1_IP` **travar** por minutos.
+
+No **ctrl-p01** (já incluído no Passo 1):
+
+```bash
+sudo ufw allow from 192.168.0.0/24 to any port 111
+sudo ufw allow from 192.168.0.0/24 to any port 2049
+sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto tcp
+sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto udp
+sudo ufw reload
+```
+
+Teste local e remoto:
+
+```bash
+showmount -e localhost
+# No GPU node (Passo 4 de config_node.md):
+# timeout 10 showmount -e 192.168.0.199
+```
+
+**Opcional (restringir faixa de portas):** fixe o mountd em `/etc/nfs.conf` no ctrl-p01:
+
+```ini
+[mountd]
+port=20048
+```
+
+Depois `sudo systemctl restart rpcbind nfs-server` e libere só `20048` em vez da faixa 32768–65535. Confirme com `sudo rpcinfo -p localhost | grep mount` que mountd escuta em 20048.
+
+> Configuração NFS (export, firewall, nfs.conf) fica **somente no ctrl-p01**. GPU nodes são clientes — não instale `nfs-server` neles.
 
 > Se você já tem vídeos/SQLite em outra máquina, copie para `/srv/track_fraude/data/` antes de subir o painel.
 
@@ -1002,7 +1039,7 @@ Capacidade:
 | Play não enfileira                      | Atlas API down, `atlas.api_url` errada ou API key inválida | `curl :30090/v1/health`; logs `atlas-platform-api`; `app-config.yaml` |
 | Play: “Nenhuma data importada”          | Vídeos fora do export NFS ou pod sem ver o mount | Copiar para `/srv/track_fraude/data/raw/...`; `kubectl exec -n track-fraude deploy/track-fraude-server -- ls /app/data/raw/default/LOJA-01` |
 | Pod `atlas-platform-api` Error          | Schema `atlas.*` ausente ou Postgres inacessível | `python tools/apply_atlas_schema.py`; `kubectl logs -n track-fraude -l app=atlas-platform-api` |
-| NFS mount falha                         | Export ou firewall                   | `showmount -e`, ufw porta 2049             |
+| NFS mount falha / `showmount` trava no GPU node | Firewall bloqueando RPC (111 + mountd) | No **ctrl-p01**: ufw 111, 2049, faixa 32768–65535; ver Passo 2.1 |
 | Fila cheia, nada roda                   | KEDA ou ScaledJob                    | `kubectl get scaledjob -n track-fraude`    |
 
 

@@ -24,6 +24,7 @@ spec:
     template:
       spec:
         restartPolicy: Never
+        runtimeClassName: nvidia
         containers:
           - name: worker
             image: 192.168.0.199:5000/track-fraude-worker:latest
