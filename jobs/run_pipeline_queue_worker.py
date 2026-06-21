@@ -87,8 +87,15 @@ def main() -> None:
         if method is None:
             return
 
-        message = PipelineQueueMessage.from_json(body)
-        returncode = _run_message(message)
+        try:
+            message = PipelineQueueMessage.from_json(body)
+            returncode = _run_message(message)
+        except Exception as exc:
+            # Falha inesperada (parse, subprocess, etc.): nack SEM requeue para
+            # não entrar em loop infinito de jobs (KEDA recria a cada requeue).
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            raise SystemExit(f"worker falhou ao processar mensagem: {exc}") from exc
+
         if returncode == 0:
             channel.basic_ack(delivery_tag=method.delivery_tag)
         else:
