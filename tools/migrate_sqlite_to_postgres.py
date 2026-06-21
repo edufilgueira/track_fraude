@@ -127,8 +127,17 @@ def main() -> None:
     except ImportError as exc:
         raise SystemExit('Instale antes: python -m pip install "psycopg[binary]>=3.1"') from exc
 
-    sqlite_path = Path(args.sqlite)
-    sqlite_conn = sqlite3.connect(sqlite_path)
+    sqlite_path = Path(args.sqlite).expanduser().resolve()
+    if not sqlite_path.is_file():
+        raise SystemExit(
+            f"SQLite não encontrado: {sqlite_path}\n"
+            "Use o caminho real do backup, por exemplo:\n"
+            "  --sqlite /srv/track_fraude/data/track_fraude.db\n"
+            "  --sqlite ~/track_fraude/data/track_fraude.db\n"
+            "Procure no servidor: find /srv/track_fraude ~/track_fraude -name 'track_fraude.db' 2>/dev/null"
+        )
+
+    sqlite_conn = sqlite3.connect(str(sqlite_path))
     sqlite_conn.row_factory = sqlite3.Row
 
     with psycopg.connect(args.postgres_url) as pg_conn:

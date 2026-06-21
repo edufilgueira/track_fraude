@@ -99,11 +99,9 @@ sudo apt install -y \
 fuso horario
 
 ```bash
-timedatectl list-timezones | grep Sao_Paulo
 sudo timedatectl set-timezone America/Sao_Paulo
-timedatectl
-timedatectl status # Procure por System clock synchronized: yes
 sudo timedatectl set-ntp true
+timedatectl status
 ```
 
 Defina hostname e IP fixo (ajuste interface e IP):
@@ -213,6 +211,7 @@ sudo ufw status
 sudo ufw allow OpenSSH
 sudo ufw allow 8080/tcp    # painel web (Docker direto, Passo 12)
 sudo ufw allow 30080/tcp   # painel web no K3s (NodePort, Passo 11)
+sudo ufw allow 30090/tcp   # Atlas Platform API (NodePort, Fase 1)
 sudo ufw allow 5000/tcp    # registry
 sudo ufw allow 5672/tcp    # rabbitmq
 sudo ufw allow 15672/tcp   # rabbitmq management
@@ -300,11 +299,6 @@ Depois `sudo systemctl restart rpcbind nfs-server` e libere só `20048` em vez d
 
 Exemplo: `/srv/track_fraude/data/raw/default/LOJA-01/2026-05-22/cam1.mp4`
 
-Se os vídeos estiverem no clone do repo, sincronize:
-
-```bash
-rsync -av ~/track_fraude/data/raw/ /srv/track_fraude/data/raw/
-```
 
 ---
 
@@ -314,6 +308,12 @@ rsync -av ~/track_fraude/data/raw/ /srv/track_fraude/data/raw/
 cd ~
 git clone https://github.com/edufilgueira/track_fraude.git
 cd track_fraude
+```
+
+Se os vídeos estiverem no clone do repo, sincronize:
+
+```bash
+rsync -av ~/track_fraude/data/raw/ /srv/track_fraude/data/raw/
 ```
 
 Se o repositório for privado ou estiver em pendrive, copie a pasta `track_fraude/` para `~/track_fraude`.
