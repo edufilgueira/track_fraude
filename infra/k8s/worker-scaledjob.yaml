@@ -36,7 +36,9 @@ spec:
         containers:
           - name: worker
             image: 192.168.0.199:5000/track-fraude-worker:latest
-            imagePullPolicy: Always
+            # IfNotPresent: imagem ~8 GB; Always refaz pull a cada job (minutos em ContainerCreating).
+            # Após rebuild/push: no node-01, `sudo k3s crictl rmi 192.168.0.199:5000/track-fraude-worker:latest`
+            imagePullPolicy: IfNotPresent
             command:
               - python
               - jobs/run_pipeline_queue_worker.py

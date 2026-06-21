@@ -317,9 +317,45 @@ Depois `git pull`, rebuild worker se houve correção, `kubectl apply -f infra/k
 
 > Com 1 GPU, o ScaledJob usa `maxReplicaCount: 1` — só um worker por vez.
 
+### Worker em `ContainerCreating` (sem logs ainda)
+
+**Sintoma:** `kubectl logs ...` responde `waiting to start: ContainerCreating`; painel trava em `pipeline enfileirado`.
+
+**Normal:** o log só avança para `--- pipeline retirado da fila ---` quando o **container já está Running** e o Python consome o RabbitMQ. Enquanto o pod cria, a UI fica parada — isso não é bug do painel.
+
+**Diagnóstico (ctrl-p01):**
+
+```bash
+POD=$(kubectl get pods -n track-fraude -l job-name -o jsonpath='{.items[0].metadata.name}')
+kubectl get pod -n track-fraude "$POD" -o wide
+kubectl describe pod -n track-fraude "$POD" | tail -30
+kubectl get events -n track-fraude --sort-by='.lastTimestamp' | tail -15
+```
+
+| Evento em `describe` | O que fazer |
+|----------------------|-------------|
+| `Pulling` / `Pulled` (imagem ~8 GB) | Aguarde 5–20 min na **primeira** vez; ou pre-pull no node-01 (abaixo) |
+| `FailedMount` / NFS | Firewall NFS no ctrl-p01 — [config_control_plane Passo 2.1](config_control_plane.md) |
+| `FailedCreatePodSandBox` / runtime | `kubectl apply -f infra/k8s/nvidia-runtime-class.yaml` |
+| `ImagePullBackOff` | Registry: `curl http://192.168.0.199:5000/v2/_catalog` no node-01; `registries.yaml` |
+
+**Pre-pull no node-01** (evita surpresa no Play):
+
+```bash
+sudo k3s crictl pull 192.168.0.199:5000/track-fraude-worker:latest
+sudo k3s crictl images | grep track-fraude-worker
+```
+
+Depois do pull, reaplique o worker se mudou `imagePullPolicy`:
+
+```bash
+kubectl apply -f infra/k8s/worker-scaledjob.yaml
+kubectl delete jobs -n track-fraude --all
+```
+
 ### Play para em `pipeline enfileirado` (sem `retirado da fila`)
 
-**Sintoma:** console mostra só `atlas_job:` / `message_id: pipeline-N`, **sem** `--- pipeline retirado da fila ---`.
+**Sintoma:** console mostra só `atlas_job:` / `message_id: pipeline-N`, **sem** `--- pipeline retirado da fila ---` (pod já **Running** há minutos).
 
 **Causa:** mensagem na fila, mas KEDA não criou job ou pod worker Pending (GPU, runtime, node errado).
 
