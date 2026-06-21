@@ -7,7 +7,6 @@ import argparse
 import os
 import subprocess
 import sys
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,12 +41,22 @@ def _run_message(message: PipelineQueueMessage) -> int:
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
         "PYTHONUTF8": "1",
+        "PYTHONUNBUFFERED": "1",
     }
     with log_path.open("a", encoding="utf-8") as handle:
-        with redirect_stdout(handle), redirect_stderr(handle):
-            print(f"\n--- pipeline retirado da fila: run_id={message.run_id} ---", flush=True)
-            print(" ".join(command), flush=True)
-            return subprocess.run(command, cwd=str(ROOT), env=env, check=False).returncode
+        handle.write(f"\n--- pipeline retirado da fila: run_id={message.run_id} ---\n")
+        handle.write(" ".join(command) + "\n")
+        handle.flush()
+        # stdout/stderr do subprocesso vão para o arquivo (painel lê via NFS).
+        # redirect_stdout no processo pai não afeta o filho run_daily_pipeline.py.
+        return subprocess.run(
+            command,
+            cwd=str(ROOT),
+            env=env,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            check=False,
+        ).returncode
 
 
 def main() -> None:
