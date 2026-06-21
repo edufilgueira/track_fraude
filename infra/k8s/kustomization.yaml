@@ -6,4 +6,5 @@ resources:
   - atlas-platform-api.yaml
   - server-deployment.yaml
   - worker-scaledjob.yaml
+  - nvidia-runtime-class.yaml
   - nvidia-device-plugin.yaml

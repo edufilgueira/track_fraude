@@ -12,45 +12,41 @@ spec:
       labels:
         name: nvidia-device-plugin-ds
     spec:
+      # Só no node GPU — ctrl-p01 não tem runtime NVIDIA configurado
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: track-fraude/gpu
+                    operator: In
+                    values: ["true"]
+      runtimeClassName: nvidia
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
       priorityClassName: system-node-critical
       containers:
-        - image: nvcr.io/nvidia/k8s-device-plugin:v0.16.2
+        - image: nvcr.io/nvidia/k8s-device-plugin:v0.17.2
           name: nvidia-device-plugin-ctr
-          args:
-            - --device-discovery-strategy=nvml
-            - --fail-on-init-error=false
           env:
             - name: FAIL_ON_INIT_ERROR
               value: "false"
-            # Env correto (NÃO use NVIDIA_DEVICE_DISCOVERY_STRATEGY)
-            - name: DEVICE_DISCOVERY_STRATEGY
-              value: nvml
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: utility
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
-              add:
-                - SYS_ADMIN
+              drop: ["ALL"]
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
-            - name: dev
-              mountPath: /dev
-            - name: nvidia-libs
-              mountPath: /usr/lib/x86_64-linux-gnu
-              readOnly: true
       volumes:
         - name: device-plugin
           hostPath:
             # Requer symlink no host (Passo 8.1 em config_node.md)
             path: /var/lib/kubelet/device-plugins
             type: DirectoryOrCreate
-        - name: dev
-          hostPath:
-            path: /dev
-        - name: nvidia-libs
-          hostPath:
-            path: /usr/lib/x86_64-linux-gnu

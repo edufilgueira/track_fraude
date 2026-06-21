@@ -675,14 +675,25 @@ Reinicie o agent no **node-01** se o symlink foi corrigido:
 sudo systemctl restart k3s-agent
 ```
 
-Depois reaplique o device plugin **no ctrl-p01**:
+### 8.2 — RuntimeClass e label do node GPU
+
+No **ctrl-p01**, crie a RuntimeClass `nvidia` (K3s não usa NVIDIA como runtime default) e marque o node GPU:
 
 ```bash
 cd ~/track_fraude
 git pull
+kubectl apply -f infra/k8s/nvidia-runtime-class.yaml
+kubectl label node node-01 track-fraude/gpu=true --overwrite
+```
+
+Depois aplique o device plugin **no ctrl-p01**:
+
+```bash
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
 ```
+
+> O plugin usa `runtimeClassName: nvidia` e só agenda em nodes com label `track-fraude/gpu=true`. Não é necessário rodá-lo no ctrl-p01.
 
 ---
 
@@ -731,13 +742,15 @@ nvidia.com/gpu:  1
 
 (ou `2`, se a máquina tiver duas GPUs)
 
-> O plugin também roda no `ctrlp01` — normal. O control plane **não** precisa ter GPU; o que importa é o pod **Running no `node-01`** e `nvidia.com/gpu` visível em `kubectl describe node node-01`.
+> O plugin roda **apenas no `node-01`** (label `track-fraude/gpu=true`). O ctrl-p01 não precisa ter GPU nem device plugin.
 
 ### C — Se `nvidia.com/gpu` não aparecer
 
 **Sintoma nos logs:** `Could not register device plugin: context deadline exceeded` → symlink errado (pasta em vez de link).
 
-**Sintoma nos logs:** `Incompatible strategy detected auto` / `No devices found` → use `DEVICE_DISCOVERY_STRATEGY=nvml` (não `NVIDIA_DEVICE_DISCOVERY_STRATEGY`) e reaplique o manifest (`git pull` + `kubectl apply`).
+**Sintoma nos logs:** `Incompatible strategy detected auto` / `No devices found` → confira `DEVICE_DISCOVERY_STRATEGY` no manifest (versões antigas); após `git pull`, use o manifest atual com `runtimeClassName: nvidia`.
+
+**Sintoma nos logs:** `Failed to initialize NVML: Unknown Error` → o container do plugin está com bibliotecas NVML incompatíveis com o driver do host. **Não** monte `/usr/lib/x86_64-linux-gnu` manualmente. Use `runtimeClassName: nvidia`, aplique `nvidia-runtime-class.yaml`, rotule o node (`track-fraude/gpu=true`) e reaplique o plugin (Passo 8.2).
 
 Causa do symlink: se `/var/lib/kubelet/device-plugins` já era **pasta**, o `ln -s` criou link *dentro* dela. Corrija com [Passo 8.1](#81--symlink-device-plugins-obrigatório-no-k3s) (`rm -rf` antes do `ln -sfn`).
 
@@ -751,11 +764,13 @@ sudo ls -la /var/lib/rancher/k3s/agent/kubelet/device-plugins/
 
 Se `/var/lib/kubelet/device-plugins` não for symlink, faça o [Passo 8.1](#81--symlink-device-plugins-obrigatório-no-k3s).
 
-**No ctrl-p01**, reaplique o manifest e reinicie o plugin:
+**No ctrl-p01**, reaplique RuntimeClass, label e plugin:
 
 ```bash
 cd ~/track_fraude
 git pull
+kubectl apply -f infra/k8s/nvidia-runtime-class.yaml
+kubectl label node node-01 track-fraude/gpu=true --overwrite
 kubectl apply -f infra/k8s/nvidia-device-plugin.yaml
 kubectl rollout restart ds/nvidia-device-plugin-daemonset -n kube-system
 ```
