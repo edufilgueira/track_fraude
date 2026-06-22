@@ -45,8 +45,8 @@ K3s server + KEDA conforme [config_control_plane.md](config_control_plane.md).
 Build e push da imagem worker:
 
 ```bash
-docker build -f Dockerfile.worker -t 192.168.0.199:5000/track-fraude-worker:latest .
-docker push 192.168.0.199:5000/track-fraude-worker:latest
+docker build -f Dockerfile.worker -t 10.10.0.100:5000/track-fraude-worker:latest .
+docker push 10.10.0.100:5000/track-fraude-worker:latest
 kubectl apply -f infra/k8s/worker-scaledjob.yaml
 ```
 
@@ -147,8 +147,8 @@ Com infra rodando localmente ou via SSH tunnel:
 
 ```bash
 python tools/verify_fase0.py \
-  --postgres-url postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude \
-  --rabbitmq-api http://192.168.0.199:15672/api/queues/%2F
+  --postgres-url postgresql://track_fraude:track_fraude@10.10.0.100:5432/track_fraude \
+  --rabbitmq-api http://10.10.0.100:15672/api/queues/%2F
 ```
 
 Se a fila `track-fraude-pipelines` ainda não existir, o script **declara automaticamente** via AMQP (comportamento normal antes do primeiro Play).

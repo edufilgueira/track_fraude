@@ -25,7 +25,7 @@ spec:
                     operator: Exists
       containers:
         - name: api
-          image: 192.168.0.199:5000/atlas-platform-api:latest
+          image: 10.10.0.100:5000/atlas-platform-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8090

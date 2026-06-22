@@ -66,8 +66,8 @@ Preencha estes valores:
 
 | Variável          | Exemplo             | Seu valor      |
 | ----------------- | ------------------- | -------------- |
-| `PC1_IP`          | `192.168.0.199`     | ______________ |
-| `NODE01_IP`       | `192.168.0.201`     | ______________ |
+| `PC1_IP`          | `10.10.0.2`         | ______________ |
+| `NODE01_IP`       | `10.10.0.10`        | ______________ |
 | `NODE01_HOSTNAME` | `node-01`           | ______________ |
 | `NODE01_DNS`      | `node-01`           | ______________ |
 | `NODE01_MAC`      | `AA:BB:CC:DD:EE:01` | ______________ |
@@ -149,10 +149,10 @@ network:
     enp3s0:
       dhcp4: false
       addresses:
-        - 192.168.0.201/24
+        - 10.10.0.10/24
       routes:
         - to: default
-          via: 192.168.0.1
+          via: 10.10.0.100
       nameservers:
         addresses: [8.8.8.8, 1.1.1.1]
 EOF
@@ -174,16 +174,16 @@ Configure os mesmos nomes do [config_control_plane.md](config_control_plane.md) 
 
 | Nome (SSH) | IP              | Este node     |
 | ---------- | --------------- | ------------- |
-| `ctrl-p01` | `192.168.0.199` | control plane |
-| `node-01`  | `192.168.0.201` | **este guia** |
+| `ctrl-p01` | `10.10.0.100` | control plane |
+| `node-01`  | `10.10.0.10` | **este guia** |
 
 
 No `node-01`:
 
 ```bash
 sudo tee -a /etc/hosts >/dev/null <<'EOF'
-192.168.0.199   ctrl-p01
-192.168.0.201   node-01
+10.10.0.100   ctrl-p01
+10.10.0.10   node-01
 EOF
 ```
 
@@ -290,7 +290,7 @@ sudo nmcli radio wifi off
 | `ssh_host`  | `node-01` (igual ao `name`)          | ______________ |
 | `ssh_user`  | saída do `whoami`                    | ______________ |
 | `mac`       | MAC da Ethernet (`enp…`)             | ______________ |
-| `broadcast` | `192.168.0.255` (LAN 192.168.0.0/24) | ______________ |
+| `broadcast` | `10.10.0.255` (LAN 10.10.0.0/24) | ______________ |
 
 
 > `name` e `ssh_host` devem ser **iguais** ao hostname deste PC (`node-01`) e ao nome que aparecerá em `kubectl get nodes` após o Passo 7.
@@ -331,7 +331,7 @@ Preencha o bloco `nodes[]` com os valores anotados no passo A:
   {
     "name": "node-01",
     "mac": "34:5a:60:7b:86:77",
-    "broadcast": "192.168.0.255",
+    "broadcast": "10.10.0.255",
     "ssh_host": "node-01",
     "ssh_user": "eduardo"
   }
@@ -345,13 +345,13 @@ Ainda no **ctrl-p01**, confirme que o nome `node-01` aponta para o IP do GPU nod
 ```bash
 grep node-01 /etc/hosts
 # esperado:
-# 192.168.0.201   node-01
+# 10.10.0.10   node-01
 ```
 
 Se não aparecer essa linha, adicione:
 
 ```bash
-echo "192.168.0.201   node-01" | sudo tee -a /etc/hosts
+echo "10.10.0.10   node-01" | sudo tee -a /etc/hosts
 ```
 
 Teste o nome:
@@ -386,7 +386,7 @@ Próximos passos do Power Manager ( **não** faça agora):
 1. [Passo 7](#passo-7--entrar-no-cluster-como-k3s-agent) — entrar no K3s e validar `"name"` no `config.json`
 2. [Passo 11](#passo-11--power-manager-opcional) — subir o serviço
 
-> Manifests Kubernetes no PC1 podem continuar com IP literal (`192.168.0.199`). Nomes locais (`ctrl-p01`, `node-01`) são para SSH, browser e Power Manager.
+> Manifests Kubernetes no PC1 podem continuar com IP literal (`10.10.0.100`). Nomes locais (`ctrl-p01`, `node-01`) são para SSH, browser e Power Manager.
 
 - `ping ctrl-p01` funciona a partir do node
 - `ssh usuario@ctrl-p01` funciona (opcional, para manutenção cruzada)
@@ -493,7 +493,7 @@ O worker monta `data/` via volume NFS do Kubernetes. O node precisa alcançar o 
 Substitua `PC1_IP`:
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 # Rede básica
 ping -c3 ${PC1_IP}
@@ -508,8 +508,8 @@ timeout 10 showmount -e ${PC1_IP}
 Esperado:
 
 ```text
-Export list for 192.168.0.199:
-/srv/track_fraude/data 192.168.0.0/24
+Export list for 10.10.0.100:
+/srv/track_fraude/data 10.10.0.0/24
 ```
 
 Mount manual de teste:
@@ -545,7 +545,7 @@ Confirme que o node alcança a API:
 
 ```bash
 # No node-01
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 # ou: PC1_DNS=ctrl-p01
 
 curl -k https://${PC1_IP}:6443/ping
@@ -561,7 +561,7 @@ Resposta esperada: `pong`
 Antes de entrar no cluster, configure o mirror do registry local (substitua `PC1_IP`):
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 sudo mkdir -p /etc/rancher/k3s
 sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<EOF
@@ -584,7 +584,7 @@ EOF
 No `node-01`:
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 K3S_TOKEN="COLE_O_TOKEN_DO_PC1_AQUI"
 K3S_NODE_NAME=node-01
 
@@ -821,7 +821,7 @@ Confirme que a imagem worker está atualizada (inclui `infra/postgres` para sche
 
 ```bash
 cd ~/track_fraude
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 docker build -f Dockerfile.worker -t ${PC1_IP}:5000/track-fraude-worker:latest .
 docker push ${PC1_IP}:5000/track-fraude-worker:latest
@@ -937,7 +937,7 @@ Código: `infra/power-manager/power_manager.py`.
 | `**name`**      | `kubectl get nodes` no ctrl-p01                            | Idêntico à coluna `NAME` (ex.: `node-01`)                        |
 | `**ssh_host**`  | Passo 0.1                                                  | Igual ao `name` neste guia; resolve via `/etc/hosts` no ctrl-p01 |
 | `**mac**`       | `ip link show` / `cat /sys/class/net/enp…/address` no node | Ethernet com cabo — **não** Wi‑Fi                                |
-| `**broadcast`** | Sub-rede LAN                                               | `192.168.0.255` para `192.168.0.0/24`                            |
+| `**broadcast`** | Sub-rede LAN                                               | `10.10.0.255` para `10.10.0.0/24`                            |
 | `**ssh_user**`  | `whoami` no node                                           | Usuário do `ssh-copy-id`                                         |
 
 
@@ -968,7 +968,7 @@ Para rodar sempre ligado no ctrl-p01, siga o **Passo 14** do [config_control_pla
 | Node nunca desliga    | `name` ≠ `kubectl get nodes`           | Corrigir `"name": "node-01"`                            |
 | Shutdown falha        | SSH pede senha                         | `ssh-copy-id` do ctrl-p01 para o node                   |
 | `kubectl drain` falha | Nome errado em `name`                  | Conferir `NAME` em `kubectl get nodes`                  |
-| Script não vê fila    | `rabbitmq_api_url` errada              | Usar `http://192.168.0.199:15672/...` ou IP do ctrl-p01 |
+| Script não vê fila    | `rabbitmq_api_url` errada              | Usar `http://10.10.0.100:15672/...` ou IP do ctrl-p01 |
 
 
 ---
@@ -978,7 +978,7 @@ Para rodar sempre ligado no ctrl-p01, siga o **Passo 14** do [config_control_pla
 Execute no **ctrl-p01**:
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 kubectl get nodes
 kubectl describe node node-01 | grep -E "nvidia.com/gpu|Ready"

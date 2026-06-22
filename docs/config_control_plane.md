@@ -44,7 +44,7 @@ Preencha estes valores (anote num papel ou arquivo):
 
 | Variável             | Exemplo                | Seu valor      |
 | -------------------- | ---------------------- | -------------- |
-| `PC1_IP`             | `192.168.0.199`        | ______________ |
+| `PC1_IP`             | `10.10.0.100`        | ______________ |
 | `PC1_HOSTNAME`       | `ctrl-p01`             | ______________ |
 | `PC1_DNS`            | `ctrl-p01`             | ______________ |
 | `USUARIO`            | `ubuntu`               | ______________ |
@@ -117,10 +117,10 @@ network:
     enp3s0:
       dhcp4: false
       addresses:
-        - 192.168.0.199/24
+        - 10.10.0.10/24
       routes:
         - to: default
-          via: 192.168.0.1
+          via: 10.10.0.1
       nameservers:
         addresses: [8.8.8.8, 1.1.1.1]
 EOF
@@ -140,10 +140,10 @@ Use **nomes estáveis** na LAN para SSH, navegador e `scp`, em vez de decorar IP
 
 | Nome (SSH / browser) | IP fixo         | Hostname sistema | Nome no K3s |
 | -------------------- | --------------- | ---------------- | ----------- |
-| `ctrl-p01`           | `192.168.0.199` | `ctrl-p01`       | `ctrl-p01`  |
-| `node-01`            | `192.168.0.201` | `node-01`        | `node-01`   |
-| `node-02`            | `192.168.0.202` | `node-02`        | `node-02`   |
-| `node-03`            | `192.168.0.203` | `node-03`        | `node-03`   |
+| `ctrl-p01`           | `10.10.0.100` | `ctrl-p01`       | `ctrl-p01`  |
+| `node-01`            | `10.10.0.10` | `node-01`        | `node-01`   |
+| `node-02`            | `10.10.0.11` | `node-02`        | `node-02`   |
+| `node-03`            | `10.10.0.12` | `node-03`        | `node-03`   |
 
 
 > Use o **mesmo nome** (`ctrl-p01`, `node-01`, …) em DNS, hostname Linux e nome do node K3s.
@@ -154,10 +154,10 @@ No **ctrl-p01** (e repita no notebook e em cada GPU node):
 
 ```bash
 sudo tee -a /etc/hosts >/dev/null <<'EOF'
-192.168.0.199   ctrl-p01
-192.168.0.201   node-01
-192.168.0.202   node-02
-192.168.0.203   node-03
+10.10.0.100   ctrl-p01
+10.10.0.10   node-01
+10.10.0.11   node-02
+10.10.0.12   node-03
 EOF
 ```
 
@@ -182,19 +182,19 @@ Se quiser que **toda a LAN** resolva nomes sem editar cada PC:
 ```bash
 sudo apt install -y dnsmasq
 sudo tee /etc/dnsmasq.d/track-fraude.conf >/dev/null <<'EOF'
-address=/ctrl-p01/192.168.0.199
-address=/node-01/192.168.0.201
-address=/node-02/192.168.0.202
-address=/node-03/192.168.0.203
+address=/ctrl-p01/10.10.0.100
+address=/node-01/10.10.0.10
+address=/node-02/10.10.0.11
+address=/node-03/10.10.0.12
 EOF
 sudo systemctl restart dnsmasq
 ```
 
-No roteador, configure o DHCP para apontar **DNS primário = `192.168.0.199`**.
+No roteador, configure o DHCP para apontar **DNS primário = `10.10.0.100`**.
 
 ### O que continua com IP nos manifests
 
-Os YAMLs do Kubernetes (`app-config.yaml`, NFS, registry) **podem manter IP** (`192.168.0.199`) — pods do K3s resolvem melhor assim. Nomes locais são para **operação humana** (SSH, browser, Power Manager).
+Os YAMLs do Kubernetes (`app-config.yaml`, NFS, registry) **podem manter IP** (`10.10.0.100`) — pods do K3s resolvem melhor assim. Nomes locais são para **operação humana** (SSH, browser, Power Manager).
 
 No Power Manager (`~/track_fraude/infra/power-manager/config.json`), configure cada GPU node conforme o [Passo 0.1 — Power Manager em config_node.md](config_node.md#power-manager-opcional) (`name`, `mac`, `ssh_host`, `ssh_user`).
 
@@ -220,10 +220,10 @@ sudo ufw allow 15672/tcp   # rabbitmq management
 sudo ufw allow 5432/tcp    # postgres (só rede interna se possível)
 sudo ufw allow 6443/tcp    # k3s api
 # NFS — rpcbind (111), nfsd (2049) e mountd (portas RPC dinâmicas ou 20048 fixa)
-sudo ufw allow from 192.168.0.0/24 to any port 111
-sudo ufw allow from 192.168.0.0/24 to any port 2049
-sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto tcp
-sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto udp
+sudo ufw allow from 10.10.0.0/24 to any port 111
+sudo ufw allow from 10.10.0.0/24 to any port 2049
+sudo ufw allow from 10.10.0.0/24 to any port 32768:65535 proto tcp
+sudo ufw allow from 10.10.0.0/24 to any port 32768:65535 proto udp
 sudo ufw enable
 ```
 
@@ -243,7 +243,7 @@ sudo chown -R $USER:$USER /srv/track_fraude/data
 Export NFS (substitua a rede se necessário):
 
 ```bash
-echo '/srv/track_fraude/data 192.168.0.0/24(rw,sync,no_subtree_check,no_root_squash)' | sudo tee -a /etc/exports
+echo '/srv/track_fraude/data 10.10.0.0/24(rw,sync,no_subtree_check,no_root_squash)' | sudo tee -a /etc/exports
 sudo exportfs -ra
 sudo systemctl enable --now nfs-server
 ```
@@ -265,10 +265,10 @@ ls -la /srv/track_fraude/data
 No **ctrl-p01** (já incluído no Passo 1):
 
 ```bash
-sudo ufw allow from 192.168.0.0/24 to any port 111
-sudo ufw allow from 192.168.0.0/24 to any port 2049
-sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto tcp
-sudo ufw allow from 192.168.0.0/24 to any port 32768:65535 proto udp
+sudo ufw allow from 10.10.0.0/24 to any port 111
+sudo ufw allow from 10.10.0.0/24 to any port 2049
+sudo ufw allow from 10.10.0.0/24 to any port 32768:65535 proto tcp
+sudo ufw allow from 10.10.0.0/24 to any port 32768:65535 proto udp
 sudo ufw reload
 ```
 
@@ -277,7 +277,7 @@ Teste local e remoto:
 ```bash
 showmount -e localhost
 # No GPU node (Passo 4 de config_node.md):
-# timeout 10 showmount -e 192.168.0.199
+# timeout 10 showmount -e 10.10.0.100
 ```
 
 **Opcional (restringir faixa de portas):** fixe o mountd em `/etc/nfs.conf` no ctrl-p01:
@@ -330,7 +330,7 @@ O `kubectl apply` lê os YAMLs **do disco do `ctrl-p01`**, não do seu notebook.
 **Opção A — editar direto no servidor (mais simples)**
 
 ```bash
-ssh eduardo@192.168.0.199
+ssh eduardo@10.10.0.100
 cd ~/track_fraude
 nano infra/k8s/data-nfs-pvc.yaml   # etc.
 ```
@@ -350,13 +350,13 @@ git pull
 
 ```powershell
 # No Windows (PowerShell) — ajuste usuário e IP
-scp infra/k8s/data-nfs-pvc.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/server-deployment.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/worker-scaledjob.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/nvidia-runtime-class.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/nvidia-device-plugin.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/atlas-platform-api.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
-scp infra/k8s/app-config.yaml eduardo@192.168.0.199:~/track_fraude/infra/k8s/
+scp infra/k8s/data-nfs-pvc.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/server-deployment.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/worker-scaledjob.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/nvidia-runtime-class.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/nvidia-device-plugin.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/atlas-platform-api.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
+scp infra/k8s/app-config.yaml eduardo@10.10.0.100:~/track_fraude/infra/k8s/
 ```
 
 Confirme no servidor **antes** de cada `kubectl apply`:
@@ -436,10 +436,10 @@ kubectl get nodes
 
 ## Passo 7 — Registry local no K3s
 
-Substitua `PC1_IP` pelo IP real (ex.: `192.168.0.199`):
+Substitua `PC1_IP` pelo IP real (ex.: `10.10.0.100`):
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 sudo mkdir -p /etc/rancher/k3s
 sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<EOF
@@ -493,7 +493,7 @@ http: server gave HTTP response to HTTPS client
 Configure `insecure-registries` no Docker Engine do PC1 (substitua o IP):
 
 ```bash
-PC1_IP=192.168.0.199   # ajuste
+PC1_IP=10.10.0.100   # ajuste
 
 sudo tee /etc/docker/daemon.json >/dev/null <<EOF
 {
@@ -531,7 +531,7 @@ docker compose -f docker-compose.infra.yml up -d registry
 Build e push:
 
 ```bash
-PC1_IP=192.168.0.199   # ajuste
+PC1_IP=10.10.0.100   # ajuste
 
 docker build -f Dockerfile.server -t ${PC1_IP}:5000/track-fraude-server:latest .
 docker build -f Dockerfile.worker -t ${PC1_IP}:5000/track-fraude-worker:latest .
@@ -576,7 +576,7 @@ Confirme que `server` e `path` apontam para o storage deste PC:
 
 ```yaml
 nfs:
-  server: 192.168.0.199        # PC1_IP
+  server: 10.10.0.100        # PC1_IP
   path: /srv/track_fraude/data
 ```
 
@@ -586,7 +586,7 @@ O manifest usa `storageClassName: track-fraude-nfs` no PV e no PVC. No K3s, sem 
 
 ### 10.2 Imagens (`infra/k8s/server-deployment.yaml`, `worker-scaledjob.yaml`, `atlas-platform-api.yaml`)
 
-Troque `CHANGE_ME_REGISTRY:5000` por `${PC1_IP}:5000` (ex.: `192.168.0.199:5000`) **nos três arquivos**.
+Troque `CHANGE_ME_REGISTRY:5000` por `${PC1_IP}:5000` (ex.: `10.10.0.100:5000`) **nos três arquivos**.
 
 ### 10.3 Segredos (`infra/k8s/app-config.yaml`)
 
@@ -607,8 +607,8 @@ Edite **somente** `infra/k8s/app-config.yaml` — troque `rabbitmq.track-fraude.
 No **Secret** (`stringData`):
 
 ```yaml
-rabbitmq-url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
-postgres-url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+rabbitmq-url: amqp://track_fraude:track_fraude@10.10.0.100:5672/%2F
+postgres-url: postgresql://track_fraude:track_fraude@10.10.0.100:5432/track_fraude
 atlas-api-key: atlas-dev-internal-key   # troque em produção
 ```
 
@@ -654,7 +654,7 @@ Checklist de edição:
 
 ```bash
 cd ~/track_fraude
-PC1_IP=192.168.0.199   # ajuste
+PC1_IP=10.10.0.100   # ajuste
 
 grep -c storageClassName infra/k8s/data-nfs-pvc.yaml    # deve imprimir 2
 grep -nE 'CHANGE_ME|cluster\.local' infra/k8s/*.yaml || echo "OK: sem placeholders óbvios"
@@ -787,7 +787,7 @@ pipeline:
   mode: queue
 
 atlas:
-  api_url: http://192.168.0.199:8090   # Platform API no host ou K8s NodePort
+  api_url: http://10.10.0.100:8090   # Platform API no host ou K8s NodePort
   api_key: atlas-dev-internal-key
 ```
 
@@ -797,7 +797,7 @@ Subir painel:
 
 ```bash
 cd ~/track_fraude
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 docker run -d --name track-fraude-server --restart unless-stopped \
   -p 8080:8080 \
@@ -904,7 +904,7 @@ shutdown node-01: idle_for=900s total_on_sec=86400
 Execute esta checklist:
 
 ```bash
-PC1_IP=192.168.0.199
+PC1_IP=10.10.0.100
 
 # Infra Docker
 docker compose -f ~/track_fraude/docker-compose.infra.yml ps

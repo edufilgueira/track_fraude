@@ -59,7 +59,7 @@ INSERT INTO atlas.workloads (
 SELECT
     'track-fraude',
     'Track Fraude Pipeline',
-    '192.168.0.199:5000/track-fraude-worker:latest',
+    '10.10.0.100:5000/track-fraude-worker:latest',
     'track-fraude-pipelines',
     'track-fraude',
     (SELECT id FROM atlas.gpu_pools WHERE slug = 'video'),

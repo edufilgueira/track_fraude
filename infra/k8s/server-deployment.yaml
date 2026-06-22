@@ -27,7 +27,7 @@ spec:
                     operator: Exists
       containers:
         - name: server
-          image: 192.168.0.199:5000/track-fraude-server:latest
+          image: 10.10.0.100:5000/track-fraude-server:latest
           imagePullPolicy: Always
           command:
             - python

@@ -40,11 +40,11 @@ git pull
 python tools/apply_atlas_schema.py
 
 # Imagens
-docker build -f Dockerfile.atlas-platform-api -t 192.168.0.199:5000/atlas-platform-api:latest .
-docker push 192.168.0.199:5000/atlas-platform-api:latest
+docker build -f Dockerfile.atlas-platform-api -t 10.10.0.100:5000/atlas-platform-api:latest .
+docker push 10.10.0.100:5000/atlas-platform-api:latest
 
-docker build -f Dockerfile.server -t 192.168.0.199:5000/track-fraude-server:latest .
-docker push 192.168.0.199:5000/track-fraude-server:latest
+docker build -f Dockerfile.server -t 10.10.0.100:5000/track-fraude-server:latest .
+docker push 10.10.0.100:5000/track-fraude-server:latest
 
 # K8s
 kubectl apply -f infra/k8s/app-config.yaml

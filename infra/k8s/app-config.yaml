@@ -6,8 +6,8 @@ metadata:
 type: Opaque
 stringData:
   secret-key: 85b85c880b4298d3758f23bae369dcbd07eb69e82da188d37ef09a669a18938f
-  rabbitmq-url: amqp://track_fraude:track_fraude@192.168.0.199:5672/%2F
-  postgres-url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+  rabbitmq-url: amqp://track_fraude:track_fraude@10.10.0.100:5672/%2F
+  postgres-url: postgresql://track_fraude:track_fraude@10.10.0.100:5432/track_fraude
   atlas-api-key: atlas-dev-internal-key
 ---
 apiVersion: v1
@@ -25,7 +25,7 @@ data:
 
     database:
       backend: postgres
-      postgres_url: postgresql://track_fraude:track_fraude@192.168.0.199:5432/track_fraude
+      postgres_url: postgresql://track_fraude:track_fraude@10.10.0.100:5432/track_fraude
 
     auth:
       admin_username: admin

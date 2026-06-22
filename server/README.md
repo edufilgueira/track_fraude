@@ -88,7 +88,7 @@ python main.py
 O botão **Play** na listagem de lojas usa o Python do worker (`.venv` na raiz ou `pipeline.python` em `config/settings.yaml`), não o venv mínimo do painel.
 
 Acesse na própria máquina: http://127.0.0.1:8080/login  
-Acesse de outro PC na rede: http://192.168.0.192:8080/login (troque pelo IP do servidor)
+Acesse de outro PC na rede: http://10.10.0.100:8080/login (troque pelo IP do servidor)
 
 ### Acesso na rede local
 

@@ -1,5 +1,5 @@
 {
-  "rabbitmq_api_url": "http://192.168.0.199:15672/api/queues/%2F/track-fraude-pipelines",
+  "rabbitmq_api_url": "http://10.10.0.100:15672/api/queues/%2F/track-fraude-pipelines",
   "rabbitmq_username": "track_fraude",
   "rabbitmq_password": "track_fraude",
   "namespace": "track-fraude",
@@ -11,7 +11,7 @@
     {
       "name": "node-01",
       "mac": "AA:BB:CC:DD:EE:01",
-      "broadcast": "192.168.0.255",
+      "broadcast": "10.10.0.255",
       "ssh_host": "node-01",
       "ssh_user": "eduardo"
     }

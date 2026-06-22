@@ -27,7 +27,7 @@ def _node(name: str) -> GpuNode:
     return GpuNode(
         name=name,
         mac="AA:BB:CC:DD:EE:00",
-        broadcast="192.168.0.255",
+        broadcast="10.10.0.255",
         ssh_host=f"{name}.local",
         ssh_user="ubuntu",
     )

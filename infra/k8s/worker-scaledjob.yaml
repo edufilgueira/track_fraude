@@ -35,7 +35,7 @@ spec:
                       values: ["true"]
         containers:
           - name: worker
-            image: 192.168.0.199:5000/track-fraude-worker:latest
+            image: 10.10.0.100:5000/track-fraude-worker:latest
             # Always: containerd checa o digest do :latest a cada job. As camadas base
             # (~8 GB) ficam em cache no node; só a camada do app (pequena) é re-baixada
             # após rebuild/push. Evita o "stale image" do IfNotPresent (que não rebaixa :latest).

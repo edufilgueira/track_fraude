@@ -134,7 +134,7 @@ pipeline:
   mode: queue
 
 atlas:
-  api_url: http://192.168.0.199:30090   # NodePort da Platform API no host
+  api_url: http://10.10.0.100:30090   # NodePort da Platform API no host
   api_key: atlas-dev-internal-key       # Bearer token (trocar em producao)
 ```
 
@@ -598,7 +598,7 @@ pipeline:
   mode: queue
 
 atlas:
-  api_url: http://192.168.0.199:30090
+  api_url: http://10.10.0.100:30090
   api_key: atlas-dev-internal-key
 ```
 
@@ -685,10 +685,10 @@ Fluxo:
 Exemplo:
 
 ```text
-registry local: 192.168.0.10:5000
-imagem Atlas API:  192.168.0.10:5000/atlas-platform-api:latest
-imagem worker:     192.168.0.10:5000/track-fraude-worker:latest
-imagem UI produto: 192.168.0.10:5000/track-fraude-server:latest
+registry local: 10.10.0.100:5000
+imagem Atlas API:  10.10.0.100:5000/atlas-platform-api:latest
+imagem worker:     10.10.0.100:5000/track-fraude-worker:latest
+imagem UI produto: 10.10.0.100:5000/track-fraude-server:latest
 ```
 
 No futuro, cada workload tera sua propria imagem no mesmo registry (ex.: `kiaia-worker:latest`).
@@ -913,7 +913,7 @@ Entao o job roda no `gpu-node-01`.
 Se a imagem ainda nao estiver no servidor, o Kubernetes baixa:
 
 ```text
-192.168.0.10:5000/track-fraude-worker:latest
+10.10.0.100:5000/track-fraude-worker:latest
 ```
 
 Como o registry esta na rede local, isso e mais rapido.
