@@ -1193,6 +1193,61 @@ Detalhes: [plano_execucao.md](../plano_execucao.md) (secao Plano Atlas Worker).
 
 ## 12. O desenho mental mais importante
 
+Pense no **Atlas** como a base da arquitetura: ele nao e um produto especifico, mas a plataforma que permite varios produtos GPU funcionarem no mesmo datacenter.
+
+```mermaid
+flowchart TB
+  subgraph Atlas["ATLAS WORKER - plataforma serverless GPU on-prem"]
+    direction TB
+
+    subgraph L1["Camada 1 - Infraestrutura compartilhada"]
+      direction LR
+      CP["Control Plane\nK3s Server + KEDA\nAtlas Platform API\nPostgres + RabbitMQ"]
+      ST["Storage\nNAS / NFS / S3-like\nvideos, modelos, resultados, logs"]
+      REG["Registry local\nDocker Hub interno\nimagens Docker dos produtos"]
+    end
+
+    subgraph L2["Camada 2 - Produtos = workloads empacotados em imagens"]
+      direction LR
+      TF["track-fraude\nworker de video / YOLO\npool: video"]
+      VLLM["vLLM / Kiaia\nworker LLM\npool: llm"]
+      CUSTOM["Container personalizado\nqualquer processamento GPU/CPU\npool: general"]
+    end
+
+    subgraph L3["Camada 3 - Nodes que executam os workers"]
+      direction LR
+      N1["GPU Node 01\nK3s agent\n1..N GPUs"]
+      N2["GPU Node 02\nK3s agent\n1..N GPUs"]
+      N3["GPU Node 03\nK3s agent\n1..N GPUs"]
+    end
+  end
+
+  USER["Cliente / UI / automacao"] -->|"POST /v1/jobs\nworkload + payload"| CP
+
+  TF -->|"build/push image"| REG
+  VLLM -->|"build/push image"| REG
+  CUSTOM -->|"build/push image"| REG
+
+  CP -->|"agenda Jobs\n1 worker por GPU"| N1
+  CP -->|"agenda Jobs\n1 worker por GPU"| N2
+  CP -->|"agenda Jobs\n1 worker por GPU"| N3
+
+  REG -->|"pull image do workload"| N1
+  REG -->|"pull image do workload"| N2
+  REG -->|"pull image do workload"| N3
+
+  N1 <-->|"le/grava dados"| ST
+  N2 <-->|"le/grava dados"| ST
+  N3 <-->|"le/grava dados"| ST
+```
+
+Como ler o desenho:
+
+- **Camada 1** e a base comum: control plane, storage e registry local.
+- **Camada 2** sao os produtos: cada produto vira uma imagem Docker/workload. Hoje temos `track-fraude`; depois podemos ter `vLLM/Kiaia`, ComfyUI ou qualquer container personalizado.
+- **Camada 3** sao os nodes: maquinas com K3s agent que recebem os workers e executam o processamento nas GPUs livres.
+- O produto nao precisa saber em qual node vai rodar. Ele entrega uma imagem + payload; o Atlas agenda, baixa a imagem no node e monta o storage.
+
 Se voce lembrar apenas uma coisa, lembre isto:
 
 ```text

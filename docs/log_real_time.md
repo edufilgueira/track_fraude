@@ -5,12 +5,13 @@ O console do botão **Play** lê o **mesmo arquivo** no NFS (`/app/data/logs/pip
 ## Durante ou logo após o Play (ctrl-p01)
 
 ```bash
+kubectl get pods -n track-fraude -l job-name -w
+
+# log tempo real
 POD=$(kubectl get pods -n track-fraude -l job-name \
   --sort-by=.metadata.creationTimestamp \
   -o jsonpath='{.items[-1].metadata.name}')
 kubectl logs -n track-fraude "$POD" -f --tail=50
-# em outro terminal:
-tail -f /srv/track_fraude/data/logs/pipeline_*.log
 
 # Pod mais recente (Running, Completed ou Error)
 POD=$(kubectl get pods -n track-fraude -l job-name \
