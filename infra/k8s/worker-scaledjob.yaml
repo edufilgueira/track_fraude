@@ -36,9 +36,10 @@ spec:
         containers:
           - name: worker
             image: 192.168.0.199:5000/track-fraude-worker:latest
-            # IfNotPresent: imagem ~8 GB; Always refaz pull a cada job (minutos em ContainerCreating).
-            # Após rebuild/push: no node-01, `sudo k3s crictl rmi 192.168.0.199:5000/track-fraude-worker:latest`
-            imagePullPolicy: IfNotPresent
+            # Always: containerd checa o digest do :latest a cada job. As camadas base
+            # (~8 GB) ficam em cache no node; só a camada do app (pequena) é re-baixada
+            # após rebuild/push. Evita o "stale image" do IfNotPresent (que não rebaixa :latest).
+            imagePullPolicy: Always
             command:
               - python
               - jobs/run_pipeline_queue_worker.py
