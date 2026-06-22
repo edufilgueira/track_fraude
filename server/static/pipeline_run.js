@@ -10,7 +10,7 @@
     btn.dataset.running = running ? "1" : "0";
     btn.classList.toggle("pipeline-btn-running", running);
     btn.innerHTML = running ? PAUSE_ICON : PLAY_ICON;
-    btn.title = running ? "Cancelar pipeline" : "Executar pipeline";
+    btn.title = running ? "Parar pipeline (encerra o worker)" : "Executar pipeline";
     btn.setAttribute("aria-label", btn.title);
   }
 

@@ -12,7 +12,7 @@ from server.dependencies import get_pipeline_run_repo, get_project_root, get_set
 from server.services.atlas_client import AtlasPlatformClient, AtlasPlatformError
 from server.services.pipeline_queue import PipelineQueuePublisher
 from server.services.video_storage import format_date_br, list_raw_import_dates
-from server.services.worker_cancel import delete_worker_pod
+from server.services.worker_cancel import stop_worker
 from server.services.worker_python import resolve_worker_python
 from track_fraude_core.pipeline_queue import PipelineQueueMessage
 
@@ -392,6 +392,7 @@ def start_daily_pipeline(
 def cancel_daily_pipeline(*, store_db_id: int) -> bool:
     cancelled = False
     worker_pod: str | None = None
+    worker_job: str | None = None
     log_file_path: Path | None = None
 
     with _lock:
@@ -420,6 +421,7 @@ def cancel_daily_pipeline(*, store_db_id: int) -> bool:
         run = repo.get_running_for_store(store_db_id)
         if run is not None:
             worker_pod = run.worker_id
+            worker_job = run.job_id
             if run.log_path:
                 log_file_path = _path_from_log_ref(project_root, run.log_path)
             repo.cancel_run(run.id)
@@ -446,8 +448,8 @@ def cancel_daily_pipeline(*, store_db_id: int) -> bool:
         except OSError:
             pass
 
-    if worker_pod:
-        delete_worker_pod(worker_pod)
+    if worker_pod or worker_job:
+        stop_worker(worker_pod, job_name=worker_job)
 
     return cancelled
 

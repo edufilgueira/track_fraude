@@ -64,7 +64,7 @@ spec:
               - name: JOB_NAME
                 valueFrom:
                   fieldRef:
-                    fieldPath: metadata.name
+                    fieldPath: metadata.labels['job-name']
               - name: PYTHONUNBUFFERED
                 value: "1"
             resources:
