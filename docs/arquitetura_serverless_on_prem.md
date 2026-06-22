@@ -1,18 +1,71 @@
-# Entendendo a arquitetura serverless on-prem do track_fraude
+# Entendendo a arquitetura serverless on-prem — Atlas Worker
 
-Este documento explica, do zero, como a nova arquitetura foi pensada para o `track_fraude`.
+Este documento explica, do zero, como a plataforma **Atlas Worker** foi pensada para orquestrar jobs GPU on-prem (estilo RunPod).
 
-A ideia principal e: voce continuar tendo um painel web simples para clicar em Play, mas por tras dele existir uma estrutura capaz de distribuir os pipelines para varios servidores com placa de video. Se hoje voce tem um servidor com 2 GPUs, consegue rodar 2 pipelines ao mesmo tempo. Se amanha ligar outro servidor com mais 2 GPUs, o sistema passa a ter capacidade para 4 pipelines simultaneos.
+O repositório `track_fraude` hoje é um **monorepo em evolução**: contém a plataforma Atlas **e** o primeiro produto registrado nela — **track-fraude** (detecção de fraude em self-checkout). Outros produtos (ex.: `kiaia` com vLLM, ComfyUI) podem entrar como workloads adicionais sem mudar a infra base.
+
+**Documentos relacionados:**
+
+| Documento | Conteúdo |
+|-----------|----------|
+| [fase0_base_operacional.md](fase0_base_operacional.md) | Fila + worker GPU + KEDA (base) |
+| [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md) | Platform API + track-fraude como workload #1 |
+| [config_control_plane.md](config_control_plane.md) | Instalação passo a passo do control plane |
+| [config_node.md](config_node.md) | Instalação dos GPU nodes |
+| [plano_execucao.md](../plano_execucao.md) | Roadmap completo (produto + Atlas) |
+
+---
+
+## Plataforma vs produtos
+
+```text
+Atlas Worker (plataforma — não executa inferência)
+├── Platform API          → POST /v1/jobs, atlas.jobs, publica na fila
+├── RabbitMQ + KEDA + K3s → escala workers efêmeros por GPU
+├── Postgres atlas.*      → workloads, jobs, pools GPU, API keys
+│
+└── Produtos (workloads registrados)
+    ├── track-fraude      → pipeline YOLO/vídeo, pool video  ← este repo
+    ├── kiaia             → vLLM (futuro), pool llm
+    └── (outros)          → ComfyUI, etc.
+```
+
+| Camada | Responsabilidade | Onde no repo |
+|--------|------------------|--------------|
+| **Atlas (plataforma)** | Enfileirar, escalar, status, pools GPU | `atlas/platform/`, `infra/k8s/atlas-platform-api.yaml` |
+| **Produto track-fraude** | Pipeline, lojas, alertas, revisão | `core/`, `src/`, `jobs/`, `server/` |
+| **Infra compartilhada** | Registry, RabbitMQ, Postgres, NFS | `docker-compose.infra.yml`, `infra/k8s/` |
+
+**track-fraude-ui** (`server/`, imagem `track-fraude-server`) é a interface do **produto** — cadastro de lojas, Play, logs, revisão. Não é o núcleo da plataforma; em produção ela chama a **Atlas Platform API**, que enfileira o job.
+
+---
+
+## Ideia principal
+
+Você continua tendo um painel web simples para clicar em Play, mas por trás existe uma estrutura capaz de distribuir pipelines para vários servidores com placa de vídeo — e, no futuro, outros tipos de job GPU (LLM, ComfyUI) no mesmo cluster.
+
+Se hoje você tem um servidor com 2 GPUs, consegue rodar 2 pipelines de vídeo ao mesmo tempo. Se amanhã ligar outro servidor com mais 2 GPUs, o sistema passa a ter capacidade para 4 pipelines simultâneos — sem reconfigurar o painel.
+
+**Fluxo atual (Fase 1 Atlas):**
+
+```text
+Play (track-fraude-ui) → Atlas Platform API (workload: track-fraude)
+                      → atlas.jobs + RabbitMQ
+                      → KEDA → Job GPU → track-fraude-worker
+                      → pipeline_runs + arquivos no NAS
+```
+
+O painel **não** publica mais direto no RabbitMQ. Quem enfileira é a Platform API.
+
+---
 
 ## Programas e servicos para `pipeline.mode: queue`
 
-Quando o painel usa `mode: queue`, ele nao executa o pipeline na propria maquina. Ele publica demanda na fila e o cluster distribui o trabalho para os servidores GPU. Por isso voce precisa de mais software do que no modo `local`.
-
-A lista abaixo separa o que instalar em cada tipo de maquina.
+Quando o painel usa `mode: queue`, ele não executa o pipeline na própria máquina. Ele chama a **Atlas Platform API**, que registra o job e publica a demanda na fila; o cluster distribui o trabalho para os servidores GPU.
 
 ### Servidor principal (control plane) — sempre ligado
 
-Este e o servidor que orquestra tudo. Pode ser a maquina onde hoje roda o painel, desde que tenha recursos para manter os servicos abaixo.
+Este é o servidor que orquestra tudo. Pode ser a máquina onde hoje roda o painel, desde que tenha recursos para manter os serviços abaixo.
 
 | Programa / servico | Para que serve |
 |--------------------|----------------|
@@ -21,18 +74,21 @@ Este e o servidor que orquestra tudo. Pode ser a maquina onde hoje roda o painel
 | **K3s server** | Orquestrador Kubernetes leve (control plane do cluster) |
 | **kubectl** | Linha de comando para gerenciar o cluster |
 | **KEDA** | Observa a fila RabbitMQ e cria Jobs de worker automaticamente |
-| **Registry Docker local** (`registry:2`) | Guardar imagens `track-fraude-server` e `track-fraude-worker` na rede interna |
-| **RabbitMQ** | Fila de pipelines (mensageria entre painel e workers) |
-| **PostgreSQL** (recomendado em producao) | Banco compartilhado para status, cadastros e execucoes concorrentes |
-| **Painel web** (`track-fraude-server`) | Interface FastAPI com `pipeline.mode: queue` |
+| **Registry Docker local** (`registry:2`) | Imagens `atlas-platform-api`, `track-fraude-server`, `track-fraude-worker` |
+| **RabbitMQ** | Fila por workload (mensageria entre Platform API e workers) |
+| **PostgreSQL** (recomendado em producao) | `atlas.*` (jobs, workloads) + cadastros e `pipeline_runs` do track-fraude |
+| **Atlas Platform API** (`atlas-platform-api`) | Gateway serverless: `POST/GET /v1/jobs`, grava `atlas.jobs`, publica na fila |
+| **track-fraude-ui** (`track-fraude-server`) | Interface FastAPI do produto (Play → Atlas API) |
 | **Power Manager** (`infra/power-manager/`) | Liga/desliga servidores GPU ociosos (Wake-on-LAN, IPMI, Redfish) |
-| **Python 3** + **Git** | Build de imagens, migracao SQLite→Postgres, scripts auxiliares |
+| **Python 3** + **Git** | Build de imagens, schema Atlas, migracao SQLite→Postgres, scripts auxiliares |
 
 Servicos que sobem via `docker-compose.infra.yml` no control plane:
 
 - Registry (`:5000`)
 - RabbitMQ (`:5672`, painel de gestao `:15672`)
 - Postgres (`:5432`)
+
+A Platform API e o painel do produto rodam no **K3s** (ou localmente em dev). Ver [config_control_plane.md](config_control_plane.md).
 
 ### Servidores GPU (nodes) — ligam conforme demanda
 
@@ -67,33 +123,38 @@ No control plane, voce **nao** precisa de:
 - PyTorch com CUDA no host
 - Worker `.venv` na raiz (o processamento pesado roda nos nodes GPU via container)
 
-O botao Play no painel apenas enfileira; quem processa video e o worker na GPU.
+O botao Play no painel chama a **Atlas Platform API**; quem processa video e o worker `track-fraude-worker` na GPU.
 
-### Configuracao minima no painel
+### Configuracao minima no painel (produto track-fraude)
 
-Em `server/config/settings.yaml`:
+Em `server/config/settings.yaml` (ou ConfigMap K8s):
 
 ```yaml
 pipeline:
   mode: queue
-  queue_url: amqp://track_fraude:track_fraude@<host-rabbitmq>:5672/%2F
-  queue_name: track-fraude-pipelines
+
+atlas:
+  api_url: http://192.168.0.199:30090   # NodePort da Platform API no host
+  api_key: atlas-dev-internal-key       # Bearer token (trocar em producao)
 ```
+
+Dentro do cluster K8s, o painel usa `http://atlas-platform-api:8090`. O RabbitMQ fica no Secret da **Platform API** — o painel nao precisa de `queue_url`.
 
 Ordem sugerida de instalacao:
 
 1. Docker + Docker Compose no control plane.
 2. Subir registry, RabbitMQ e Postgres (`docker compose -f docker-compose.infra.yml up -d`).
-3. Instalar K3s server e kubectl.
-4. Instalar KEDA no cluster.
-5. Build e push das imagens server e worker para o registry local.
-6. Configurar NAS/NFS e aplicar manifests em `infra/k8s/`.
-7. Instalar K3s agent + driver NVIDIA nos servidores GPU.
-8. Aplicar NVIDIA Device Plugin e validar GPUs (`kubectl describe nodes`).
-9. Configurar `pipeline.mode: queue` no painel.
-10. Subir o Power Manager para ligar/desligar nodes GPU automaticamente.
+3. Aplicar schema Atlas (`python tools/apply_atlas_schema.py`).
+4. Instalar K3s server e kubectl.
+5. Instalar KEDA no cluster.
+6. Build e push das imagens `atlas-platform-api`, `track-fraude-server` e `track-fraude-worker` para o registry local.
+7. Configurar NAS/NFS e aplicar manifests em `infra/k8s/`.
+8. Instalar K3s agent + driver NVIDIA nos servidores GPU.
+9. Aplicar NVIDIA Device Plugin e validar GPUs (`kubectl describe nodes`).
+10. Configurar `pipeline.mode: queue` e `atlas.api_url` no painel.
+11. Subir o Power Manager para ligar/desligar nodes GPU automaticamente.
 
-Guia operacional detalhado: `infra/README.md`.
+Guia operacional detalhado: [config_control_plane.md](config_control_plane.md) e [fase1_atlas_fundacao.md](fase1_atlas_fundacao.md).
 
 ## Plano de maquinas fisicas (`mode: queue`)
 
@@ -115,7 +176,7 @@ flowchart TB
   subgraph PC01["PC 01 - Control Plane - SEMPRE LIGADO"]
     PC01Role["Orquestra o cluster e recebe o Play"]
     PC01Install["Instalar: Ubuntu, Docker, K3s server, kubectl, KEDA, Python, Git"]
-    PC01Services["Roda: Painel web, RabbitMQ, Postgres, Registry, Power Manager"]
+    PC01Services["Roda: Atlas API, track-fraude-ui, RabbitMQ, Postgres, Registry, Power Manager"]
   end
 
   subgraph NAS01["PC/NAS 02 - Storage - SEMPRE LIGADO"]
@@ -167,13 +228,13 @@ flowchart TB
 
 | Item | Detalhe |
 |------|---------|
-| **Funcao** | Cerebro da operacao: painel web, fila, banco, registry, orquestracao K3s, power manager |
+| **Funcao** | Cerebro da operacao: Atlas API, UI do produto, fila, banco, registry, orquestracao K3s, power manager |
 | **Hardware sugerido** | CPU 4+ nucleos, 16 GB RAM, SSD 256 GB+, rede cabeada |
 | **GPU** | Nao precisa |
 | **Sempre ligado?** | Sim |
 | **Instalar no sistema** | Ubuntu Server, Docker, Docker Compose, K3s server, kubectl, KEDA, Python 3, Git |
-| **Subir como servico** | Painel (`track-fraude-server`), RabbitMQ, PostgreSQL, Registry Docker, Power Manager |
-| **Portas principais** | `8080` painel, `5672` RabbitMQ, `15672` gestao RabbitMQ, `5432` Postgres, `5000` registry |
+| **Subir como servico** | Atlas Platform API, track-fraude-ui, RabbitMQ, PostgreSQL, Registry Docker, Power Manager |
+| **Portas principais** | `8080`/`30080` UI, `8090`/`30090` Atlas API, `5672` RabbitMQ, `15672` gestao RabbitMQ, `5432` Postgres, `5000` registry |
 | **Nao instalar aqui** | Ultralytics, PyTorch, worker `.venv`, YOLO no host |
 
 #### PC/NAS 02 — Storage (obrigatorio, sempre ligado)
@@ -243,7 +304,8 @@ Exemplos:
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
 │ PC 01 - CONTROL PLANE (sempre ligado)                           │
-│  • Painel web (usuario clica Play)                              │
+│  • Atlas Platform API (enfileira jobs)                          │
+│  • track-fraude-ui (usuario clica Play)                         │
 │  • RabbitMQ (fila)                                              │
 │  • Postgres (status e cadastros)                                │
 │  • Registry (imagens Docker)                                    │
@@ -278,8 +340,10 @@ Exemplos:
 - [ ] K3s server instalado
 - [ ] kubectl funcionando
 - [ ] KEDA instalado no cluster
-- [ ] Imagens server e worker no registry local
-- [ ] Painel com `pipeline.mode: queue`
+- [ ] Imagens atlas-platform-api, server e worker no registry local
+- [ ] Schema `atlas.*` aplicado no Postgres
+- [ ] Atlas Platform API Running (`GET /v1/health`)
+- [ ] Painel com `pipeline.mode: queue` e `atlas.api_url`
 - [ ] Power Manager configurado
 - [ ] NFS montado (se nao usar NAS separado)
 
@@ -302,25 +366,33 @@ Exemplos:
 
 ## 1. O problema que estamos resolvendo
 
-Hoje o projeto funciona de forma simples:
+### Modo simples (dev / instalacao unica)
 
-1. Voce abre o painel web.
+O produto track-fraude funciona de forma direta:
+
+1. Voce abre a UI (`server/`).
 2. Escolhe uma loja e uma data.
 3. Clica em Play.
-4. O proprio servidor do painel chama o pipeline localmente.
+4. A propria maquina executa o pipeline localmente (`pipeline.mode: local`).
 5. O pipeline processa video, tracking, eventos, alertas e evidencias.
 
-Isso funciona bem enquanto existe uma maquina principal fazendo tudo.
+Isso funciona bem enquanto existe uma maquina principal fazendo tudo. Ver [install_server.md](install_server.md).
 
-O problema aparece quando voce quer crescer:
+### Por que a plataforma Atlas existe
+
+O problema aparece quando voce quer crescer — e quando quer **outros produtos GPU** no mesmo datacenter:
 
 - Como rodar varios pipelines ao mesmo tempo?
 - Como garantir que cada pipeline use uma GPU livre?
 - Como adicionar outro servidor GPU sem reconfigurar tudo manualmente?
+- Como enfileirar jobs de produtos diferentes (video, LLM) na mesma infra?
 - Como evitar que servidores fiquem ligados sem trabalho?
 - Como subir novas versoes do worker rapidamente?
 
-A arquitetura nova resolve isso separando as responsabilidades.
+A plataforma **Atlas Worker** resolve isso separando:
+
+- **Plataforma** — enfileirar, escalar, status (Platform API + KEDA + K3s).
+- **Produtos** — logica de negocio (track-fraude hoje; kiaia, ComfyUI no futuro).
 
 ## 2. A ideia em uma analogia simples
 
@@ -335,22 +407,24 @@ No modelo antigo:
 
 Funciona para poucos pedidos, mas nao escala.
 
-No modelo novo:
+No modelo novo (Atlas + fila):
 
-- O garcom recebe o pedido.
-- Ele coloca o pedido numa fila.
-- A cozinha tem varios cozinheiros.
+- O garcom (UI track-fraude) recebe o pedido.
+- Ele passa o pedido ao **gerente de pedidos** (Atlas Platform API).
+- O gerente registra o job e coloca o pedido na fila certa (por workload).
+- A cozinha tem varios cozinheiros (workers GPU por produto).
 - Cada cozinheiro pega um pedido quando esta livre.
 - Se chega mais demanda, voce coloca mais cozinheiros.
 - Se nao tem pedidos, alguns cozinheiros podem ir embora ou desligar a cozinha.
 
 No nosso projeto:
 
-- O painel web e o garcom.
-- A fila e a lista de pedidos.
-- Cada worker GPU e um cozinheiro.
-- Cada pipeline e um pedido.
-- K3s/Kubernetes e o gerente da cozinha.
+- **track-fraude-ui** e o garcom (interface do produto).
+- **Atlas Platform API** e o gerente de pedidos.
+- A fila e a lista de pedidos (RabbitMQ, uma fila por workload).
+- Cada **track-fraude-worker** e um cozinheiro de video.
+- Cada pipeline e um pedido (`workload: track-fraude` + payload).
+- K3s/Kubernetes e o gerente da cozinha fisica.
 - KEDA observa a fila e cria workers quando precisa.
 - O power manager liga/desliga servidores GPU conforme a demanda.
 
@@ -362,24 +436,26 @@ Cada servidor GPU tem 2 placas de video. Entao, no total, esta arquitetura teria
 
 ```mermaid
 flowchart LR
-  User["Usuario no navegador"] -->|"Acessa painel"| Web
+  User["Usuario no navegador"] -->|"Acessa UI do produto"| Web
 
   subgraph ControlPlane["Servidor principal: control plane sempre ligado"]
-    Web["Painel Web FastAPI"]
-    Rabbit["RabbitMQ: fila de pipelines"]
+    Web["track-fraude-ui FastAPI"]
+    AtlasAPI["Atlas Platform API"]
+    Rabbit["RabbitMQ: fila por workload"]
     K3s["K3s Server: orquestrador"]
     KEDA["KEDA: scheduler por fila"]
     Registry["Registry Docker local"]
-    DB["Banco de dados: status e cadastros"]
+    DB["Postgres: atlas.jobs + pipeline_runs"]
     Power["Power Manager"]
   end
 
   NAS["NAS ou NFS compartilhado: videos, logs, resultados e evidencias"]
 
-  Web -->|"1. Play cria execucao queued"| DB
-  Web -->|"2. Publica mensagem do pipeline"| Rabbit
-  Rabbit -->|"3. KEDA ve demanda na fila"| KEDA
-  KEDA -->|"4. Pede para criar Job"| K3s
+  Web -->|"1. Play POST /v1/jobs workload=track-fraude"| AtlasAPI
+  AtlasAPI -->|"2. INSERT atlas.jobs + pipeline queued"| DB
+  AtlasAPI -->|"3. Publica PipelineQueueMessage"| Rabbit
+  Rabbit -->|"4. KEDA ve demanda na fila"| KEDA
+  KEDA -->|"5. Pede para criar Job"| K3s
 
   subgraph Node01["GPU Node 01"]
     Node01Agent["K3s Agent"]
@@ -426,9 +502,9 @@ flowchart LR
 
 ### Como ler esse desenho
 
-O usuario nao conversa diretamente com os servidores GPU. Ele conversa com o painel web, que fica no servidor principal.
+O usuario nao conversa diretamente com os servidores GPU. Ele conversa com a **UI do produto** (track-fraude-ui), que fica no control plane.
 
-Quando voce clica em Play, o painel nao precisa saber qual GPU vai executar o trabalho. O painel apenas cria uma execucao no banco e coloca uma mensagem na fila RabbitMQ.
+Quando voce clica em Play, a UI **nao** publica direto no RabbitMQ. Ela chama a **Atlas Platform API** com `workload: track-fraude` e o payload do pipeline (`store_id`, `date`, etc.). A API grava em `atlas.jobs`, cria/atualiza `pipeline_runs` e publica a mensagem na fila do workload.
 
 O KEDA fica olhando a fila. Quando ele percebe que existem mensagens esperando, ele pede ao K3s/Kubernetes para criar Jobs de worker.
 
@@ -491,11 +567,11 @@ Se os nodes 02 e 03 estavam desligados:
 
 ## 4. Os componentes da arquitetura
 
-### Painel web
+### track-fraude-ui (painel do produto)
 
-O painel web continua sendo a interface que voce usa no navegador.
+A UI em `server/` e a interface do **produto** track-fraude — nao e o nucleo da plataforma Atlas.
 
-Ele fica em `server/` e continua responsavel por:
+Ela continua responsavel por:
 
 - Login.
 - Cadastro de grupos, lojas e cameras.
@@ -504,25 +580,44 @@ Ele fica em `server/` e continua responsavel por:
 - Acompanhamento de status e logs.
 - Revisao de alertas.
 
-No modo atual, chamado `local`, o painel executa o pipeline na propria maquina.
+No modo `local` (dev), a UI executa o pipeline na propria maquina via subprocesso.
 
-No modo novo, chamado `queue`, o painel nao executa o pipeline diretamente. Ele apenas cria uma demanda e coloca essa demanda na fila.
+No modo `queue` (producao Atlas), a UI **nao** executa o pipeline nem publica direto no RabbitMQ. Ela chama a **Atlas Platform API** (`server/services/atlas_client.py`) com `workload: track-fraude` e o payload `PipelineQueueMessage`.
 
-Configuracao atual:
+Configuracao dev (modo local):
 
 ```yaml
 pipeline:
   mode: local
 ```
 
-Quando quiser usar a arquitetura distribuida:
+Producao distribuida (Atlas):
 
 ```yaml
 pipeline:
   mode: queue
+
+atlas:
+  api_url: http://192.168.0.199:30090
+  api_key: atlas-dev-internal-key
 ```
 
-### Worker
+### Atlas Platform API
+
+Servico em `atlas/platform/` — gateway serverless da plataforma.
+
+Responsabilidades:
+
+- Autenticar chamadas (`Authorization: Bearer` + `atlas.api_keys`).
+- Resolver `workload_slug` → fila, imagem, pool GPU (tabela `atlas.workloads`).
+- Gravar job em `atlas.jobs` e publicar mensagem no RabbitMQ.
+- Expor `GET /v1/health`, `POST /v1/jobs`, `GET /v1/jobs/{id}`.
+
+Imagem Docker: `atlas-platform-api:latest`. Deploy: `infra/k8s/atlas-platform-api.yaml`.
+
+Qualquer cliente (UI track-fraude, automacao, okiaia.com no futuro) enfileira jobs pela mesma API informando o `workload` — nao precisa conhecer fila, node ou imagem.
+
+### Worker (produto track-fraude)
 
 O worker e a parte pesada do projeto.
 
@@ -591,15 +686,18 @@ Exemplo:
 
 ```text
 registry local: 192.168.0.10:5000
-imagem worker: 192.168.0.10:5000/track-fraude-worker:latest
-imagem painel: 192.168.0.10:5000/track-fraude-server:latest
+imagem Atlas API:  192.168.0.10:5000/atlas-platform-api:latest
+imagem worker:     192.168.0.10:5000/track-fraude-worker:latest
+imagem UI produto: 192.168.0.10:5000/track-fraude-server:latest
 ```
+
+No futuro, cada workload tera sua propria imagem no mesmo registry (ex.: `kiaia-worker:latest`).
 
 ### Fila
 
-A fila e onde ficam os pipelines esperando execucao.
+A fila e onde ficam os jobs esperando execucao — **uma fila por workload**, configurada em `atlas.workloads`.
 
-Quando voce clica em Play, o painel cria uma mensagem parecida com:
+Quando voce clica em Play, a UI chama a Platform API, que publica uma mensagem `PipelineQueueMessage`:
 
 ```json
 {
@@ -702,25 +800,18 @@ Assim todos enxergam os mesmos arquivos.
 
 ### Banco de dados
 
-Hoje o projeto usa SQLite.
+Em dev local, o produto track-fraude ainda pode usar SQLite (`data/track_fraude.db`).
 
-SQLite e simples e funciona bem localmente, mas nao e ideal quando varios servidores escrevem ao mesmo tempo.
+Na arquitetura distribuida, o recomendado e **PostgreSQL** compartilhado:
 
-Na arquitetura distribuida, o recomendado e Postgres.
+| Schema / tabelas | Conteudo |
+|------------------|----------|
+| `atlas.*` | Plataforma: `workloads`, `jobs`, `gpu_pools`, `api_keys` |
+| Cadastros + `pipeline_runs` | Produto track-fraude: lojas, cameras, execucoes, fases, erros |
 
-O banco guarda:
+O schema Atlas esta em `infra/postgres/schema_atlas.sql`. Aplicar com `python tools/apply_atlas_schema.py`.
 
-- Lojas.
-- Grupos.
-- Cameras.
-- Usuarios.
-- Execucoes de pipeline.
-- Status do pipeline.
-- Fase atual.
-- Erros.
-- Historico.
-
-Importante: o projeto ainda continua funcionando com SQLite no modo local. A migracao para Postgres e o caminho recomendado para producao distribuida.
+Importante: SQLite continua valido no modo `local` para desenvolvimento do produto. Postgres e obrigatorio para producao com varios workers e a Platform API.
 
 ### Power manager
 
@@ -749,7 +840,7 @@ Agora vamos juntar tudo.
 
 ### Passo 1: Voce clica em Play
 
-No painel, voce escolhe:
+Na UI track-fraude, voce escolhe:
 
 - Grupo.
 - Loja.
@@ -757,32 +848,37 @@ No painel, voce escolhe:
 
 E clica em Play.
 
-### Passo 2: O painel registra a execucao
+### Passo 2: A UI registra a execucao
 
-O painel cria uma execucao no banco com status:
+A UI cria uma execucao em `pipeline_runs` com status:
 
 ```text
 queued
 ```
 
-Isso significa:
+### Passo 3: A UI chama a Atlas Platform API
 
-```text
-O pipeline foi solicitado, mas ainda nao comecou a processar.
+A UI envia `POST /v1/jobs` com:
+
+```json
+{
+  "workload": "track-fraude",
+  "payload": {
+    "run_id": 123,
+    "store_id": "LOJA-01",
+    "group_code": "default",
+    "date": "2026-05-22"
+  }
+}
 ```
 
-### Passo 3: O painel envia uma mensagem para a fila
+A Platform API:
 
-O painel publica uma mensagem no RabbitMQ.
+1. Valida API key e resolve o workload em `atlas.workloads`.
+2. Insere registro em `atlas.jobs`.
+3. Publica `PipelineQueueMessage` na fila RabbitMQ do workload.
 
-Essa mensagem informa:
-
-- ID da execucao.
-- Loja.
-- Grupo.
-- Data.
-- Caminho do banco.
-- Opcoes do pipeline.
+A UI **nao** fala com RabbitMQ diretamente.
 
 ### Passo 4: KEDA ve a fila
 
@@ -974,10 +1070,11 @@ Nem tudo deve desligar.
 Normalmente ficam sempre ligados:
 
 - Control plane K3s.
-- Painel web.
+- Atlas Platform API.
+- track-fraude-ui (ou outras UIs de produto).
 - RabbitMQ.
 - Registry local.
-- Banco de dados.
+- Banco de dados (Postgres).
 - NAS/NFS.
 - Power manager.
 
@@ -989,7 +1086,7 @@ O que pode desligar:
 
 ## 8. Modo local vs modo queue
 
-### Modo local
+### Modo local (dev do produto track-fraude)
 
 Configuracao:
 
@@ -1000,49 +1097,67 @@ pipeline:
 
 Comportamento:
 
-- O painel chama o pipeline na propria maquina.
-- Nao precisa de RabbitMQ.
-- Nao precisa de K3s.
-- Nao precisa de KEDA.
-- Bom para desenvolvimento e teste local.
+- A UI chama o pipeline na propria maquina (subprocesso + `.venv` na raiz).
+- Nao precisa de Atlas API, RabbitMQ, K3s ou KEDA.
+- Bom para desenvolvimento e teste local do produto.
 
-Este e o modo mais parecido com o funcionamento atual.
+Este e o modo mais parecido com a instalacao simples (`docs/install_server.md`).
 
-### Modo queue
+> **Roadmap Atlas Fase 2:** remover modo local em producao; worker e UI totalmente separados.
+
+### Modo queue (producao Atlas)
 
 Configuracao:
 
 ```yaml
 pipeline:
   mode: queue
+
+atlas:
+  api_url: http://<host>:30090
+  api_key: <sua-api-key>
 ```
 
 Comportamento:
 
-- O painel coloca a demanda na fila.
-- KEDA cria Jobs.
-- Kubernetes escolhe GPUs livres.
-- Workers rodam em containers.
-- Servidores GPU podem escalar.
-- Power manager pode ligar/desligar maquinas.
+- A UI chama a **Atlas Platform API** (`workload: track-fraude`).
+- A API grava `atlas.jobs` e publica na fila.
+- KEDA cria Jobs no Kubernetes.
+- Kubernetes escolhe GPUs livres (pool `video`).
+- Workers `track-fraude-worker` rodam em containers.
+- Servidores GPU podem escalar; power manager pode ligar/desligar maquinas.
 
-Este e o modo para producao distribuida.
+Este e o modo para producao distribuida e para adicionar novos workloads no mesmo cluster.
 
 ## 9. O que ja foi preparado no projeto
 
-Foram adicionados arquivos para preparar essa arquitetura:
+### Plataforma Atlas
 
-- `Dockerfile.server`: imagem do painel web.
-- `Dockerfile.worker`: imagem do worker GPU.
-- `.dockerignore`: evita mandar videos, bancos e artefatos grandes para o build Docker.
-- `docker-compose.infra.yml`: sobe registry, RabbitMQ e Postgres para apoio local.
-- `infra/k8s/`: manifests Kubernetes/K3s.
-- `infra/k3s/registries.yaml.example`: exemplo de registry local no K3s.
-- `infra/postgres/schema.sql`: schema inicial Postgres.
-- `tools/migrate_sqlite_to_postgres.py`: copia dados do SQLite atual para Postgres.
-- `infra/power-manager/`: exemplo de gerenciador para ligar/desligar nodes GPU.
-- `core/src/track_fraude_core/pipeline_queue.py`: contrato da mensagem que vai para a fila.
-- `jobs/run_pipeline_queue_worker.py`: worker que consome uma mensagem da fila e executa o pipeline.
+- `atlas/platform/` — Atlas Platform API (FastAPI).
+- `atlas/db/` — repositorios e schema.
+- `Dockerfile.atlas-platform-api` — imagem da API.
+- `infra/k8s/atlas-platform-api.yaml` — deploy no K3s.
+- `infra/postgres/schema_atlas.sql` — `atlas.workloads`, `atlas.jobs`, `atlas.gpu_pools`, `atlas.api_keys`.
+- `tools/apply_atlas_schema.py` — aplicar schema em Postgres existente.
+- `tools/verify_fase1.py` — validacao da Fase 1.
+
+### Produto track-fraude
+
+- `server/services/atlas_client.py` — UI chama Platform API no modo queue.
+- `Dockerfile.server` — imagem track-fraude-ui.
+- `Dockerfile.worker` — imagem track-fraude-worker GPU.
+- `core/src/track_fraude_core/pipeline_queue.py` — contrato `PipelineQueueMessage` (API + worker).
+- `jobs/run_pipeline_queue_worker.py` — worker que consome fila e executa pipeline.
+
+### Infra compartilhada
+
+- `.dockerignore` — evita mandar videos e artefatos grandes para o build.
+- `docker-compose.infra.yml` — registry, RabbitMQ e Postgres.
+- `infra/k8s/` — manifests Kubernetes/K3s (server, worker ScaledJob, config).
+- `infra/k3s/registries.yaml.example` — registry local no K3s.
+- `infra/postgres/schema.sql` — schema inicial Postgres (produto).
+- `tools/migrate_sqlite_to_postgres.py` — copia SQLite → Postgres.
+- `infra/power-manager/` — ligar/desligar nodes GPU.
 
 ## 10. O que ainda precisa ser entendido antes de colocar em producao
 
@@ -1050,32 +1165,51 @@ Esta arquitetura envolve infraestrutura real. Antes de rodar em producao, voce p
 
 - IP fixo do servidor principal.
 - IP/caminho do NAS/NFS.
-- Usuario e senha reais do RabbitMQ.
+- Usuario e senha reais do RabbitMQ (Secret K8s).
 - Usuario e senha reais do Postgres.
+- API key da Platform API (substituir `atlas-dev-internal-key`).
 - Nome ou IP do registry local.
 - Como os servidores GPU serao acordados: Wake-on-LAN, IPMI ou Redfish.
 - Tempo de espera antes de desligar servidor ocioso.
 - Rede cabeada adequada, idealmente 2.5GbE ou 10GbE para videos grandes.
 
-## 11. O desenho mental mais importante
+---
+
+## 11. Roadmap Atlas (evolucao da plataforma)
+
+| Fase | Nome | Status | Conteudo |
+|------|------|--------|----------|
+| **0** | Base operacional | Operacional | Fila + worker GPU + KEDA + Postgres |
+| **1** | Fundacao Atlas | Implementada | Platform API; track-fraude = workload #1 |
+| **2** | Desacoplamento | Planejada | Worker ≠ UI; remover modo local |
+| **3** | Atlas Hub MVP | Planejada | UI estilo RunPod — CRUD workloads, registry |
+| **4** | Atlas Fleet | Planejada | Nodes, export YAML, power por pool |
+| **5** | Nuvem | Planejada | okiaia.com → API + keys por tenant |
+| **6** | Multi-workload | Planejada | kiaia (vLLM), ComfyUI, namespaces por produto |
+
+Detalhes: [plano_execucao.md](../plano_execucao.md) (secao Plano Atlas Worker).
+
+---
+
+## 12. O desenho mental mais importante
 
 Se voce lembrar apenas uma coisa, lembre isto:
 
 ```text
-Painel nao precisa processar video.
-Painel cria uma demanda.
-Fila guarda a demanda.
+UI do produto nao processa video.
+UI chama Atlas Platform API (workload + payload).
+API grava atlas.jobs e publica na fila.
 KEDA transforma demanda em Job.
 Kubernetes coloca o Job em uma GPU livre.
-Worker executa o pipeline.
+Worker do produto executa o pipeline.
 NAS guarda os arquivos.
-Banco guarda o status.
+Postgres guarda atlas.jobs + pipeline_runs.
 Power manager desliga GPU quando nao tem trabalho.
 ```
 
 Essa e a arquitetura inteira.
 
-## 12. Resumo em uma frase
+## 13. Resumo em uma frase
 
-A arquitetura transforma o `track_fraude` em uma fabrica de processamento: o painel recebe pedidos, a fila organiza esses pedidos, o Kubernetes distribui para servidores com GPU, os workers processam os videos, e os servidores GPU podem crescer ou desligar conforme a demanda.
+A arquitetura transforma o datacenter em uma **fabrica serverless GPU**: a plataforma Atlas recebe pedidos, a fila organiza por workload, o Kubernetes distribui para servidores com GPU, os workers de cada produto processam, e os nodes GPU podem crescer ou desligar conforme a demanda. O **track-fraude** e o primeiro produto registrado nessa fabrica.
 

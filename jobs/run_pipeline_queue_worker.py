@@ -86,23 +86,23 @@ def main() -> None:
         method, _properties, body = channel.basic_get(queue=args.queue_name, auto_ack=False)
         if method is None:
             return
-
-        try:
-            message = PipelineQueueMessage.from_json(body)
-            returncode = _run_message(message)
-        except Exception as exc:
-            # Falha inesperada (parse, subprocess, etc.): nack SEM requeue para
-            # não entrar em loop infinito de jobs (KEDA recria a cada requeue).
-            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            raise SystemExit(f"worker falhou ao processar mensagem: {exc}") from exc
-
-        if returncode == 0:
-            channel.basic_ack(delivery_tag=method.delivery_tag)
-        else:
-            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            raise SystemExit(returncode)
+        # Ack IMEDIATO + fecha a conexão antes de processar. O pipeline leva minutos
+        # e o pika.BlockingConnection cairia por falta de heartbeat (a thread fica
+        # bloqueada no subprocesso), fazendo a mensagem voltar à fila e reprocessar
+        # em loop. O estado do run é rastreado no Postgres, então não precisamos da
+        # conexão aberta durante o processamento.
+        channel.basic_ack(delivery_tag=method.delivery_tag)
     finally:
-        connection.close()
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+    # Pipeline roda SEM conexão RabbitMQ aberta (evita StreamLostError no fim).
+    message = PipelineQueueMessage.from_json(body)
+    returncode = _run_message(message)
+    if returncode != 0:
+        raise SystemExit(returncode)
 
 
 if __name__ == "__main__":
