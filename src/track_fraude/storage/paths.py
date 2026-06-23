@@ -9,14 +9,22 @@ DEFAULT_OUTPUT_DIR = Path("data/output")
 DEFAULT_RAW_DIR = Path("data/raw")
 
 
+def data_root(project_root: Path | str) -> Path:
+    """Raiz de data/ (raw, processed, logs). Respeita TRACK_FRAUDE_DATA_ROOT no worker."""
+    override = os.getenv("TRACK_FRAUDE_DATA_ROOT", "").strip()
+    if override:
+        return Path(override)
+    return Path(project_root) / "data"
+
+
 def processed_root(project_root: Path | str) -> Path:
     """Raiz dos artefatos intermediários (sync, tracks, pipeline_state)."""
-    return Path(project_root) / DEFAULT_PROCESSED_DIR
+    return data_root(project_root) / "processed"
 
 
 def output_root(project_root: Path | str) -> Path:
     """Raiz dos entregáveis finais (alertas, clips, índices para revisão)."""
-    return Path(project_root) / DEFAULT_OUTPUT_DIR
+    return data_root(project_root) / "output"
 
 
 def raw_root(project_root: Path | str) -> Path:
@@ -24,7 +32,12 @@ def raw_root(project_root: Path | str) -> Path:
     override = os.getenv("TRACK_FRAUDE_RAW_ROOT", "").strip()
     if override:
         return Path(override)
-    return Path(project_root) / DEFAULT_RAW_DIR
+    return data_root(project_root) / "raw"
+
+
+def source_raw_root(project_root: Path | str) -> Path:
+    """Origem NFS de raw/ — nunca usa TRACK_FRAUDE_RAW_ROOT (cache local)."""
+    return data_root(project_root) / "raw"
 
 
 @dataclass(frozen=True)

@@ -71,6 +71,8 @@ spec:
               # Copia raw do NFS para disco local do pod antes do track (evita I/O lento frame a frame).
               - name: TRACK_FRAUDE_RAW_CACHE_DIR
                 value: /cache/raw
+              - name: TRACK_FRAUDE_DATA_ROOT
+                value: /app/data
             resources:
               limits:
                 nvidia.com/gpu: 1

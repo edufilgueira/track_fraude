@@ -18,6 +18,11 @@ from track_fraude_core.pipeline_queue import (
     PipelineQueueMessage,
 )
 from track_fraude_core.subprocess_utils import TeeWriter, run_command_with_cancel
+from track_fraude.storage.raw_cache import (
+    log_raw_cache_status,
+    raw_root_override_env,
+    stage_raw_videos_if_configured,
+)
 
 
 def _log_path(message: PipelineQueueMessage) -> Path:
@@ -48,6 +53,14 @@ def _run_message(message: PipelineQueueMessage) -> int:
         handle.write(" ".join(command) + "\n")
         handle.flush()
         tee = TeeWriter(handle, sys.stdout)
+        log_raw_cache_status(worker=True)
+        stage_raw_videos_if_configured(
+            project_root=ROOT,
+            group_code=message.group_code,
+            store_id=message.store_id,
+            date=message.date,
+        )
+        env.update(raw_root_override_env())
         should_cancel = lambda: _is_cancelled(repo, message.run_id)
         return run_command_with_cancel(
             command,

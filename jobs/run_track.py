@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -73,6 +74,13 @@ def main() -> None:
             f"Execute: python tools/generate_test_video.py "
             f"--store-id {config['store_id']} --camera {args.camera} --date {args.date}"
         )
+
+    raw_override = os.getenv("TRACK_FRAUDE_RAW_ROOT", "").strip()
+    print(
+        f"track vídeo: {video_path}"
+        + (f" (raw cache: {raw_override})" if raw_override else " (NFS/disco direto)"),
+        flush=True,
+    )
 
     sync_path = scope.sync_map_path(args.date, args.camera)
     if not sync_path.exists():

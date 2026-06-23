@@ -62,12 +62,22 @@ def test_stage_raw_videos_copies_day_and_sets_override(
     monkeypatch.delenv(RAW_ROOT_OVERRIDE_ENV, raising=False)
 
 
-def test_stage_raw_videos_skips_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stage_raw_videos_skips_when_env_unset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("TRACK_FRAUDE_RAW_CACHE_DIR", raising=False)
     result = stage_raw_videos_if_configured(
-        project_root="/app",
+        project_root=tmp_path / "app",
         group_code="default",
         store_id="LOJA-01",
         date="2026-05-22",
     )
     assert result is None
+
+
+def test_raw_root_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from track_fraude.storage.raw_cache import raw_root_override_env
+
+    monkeypatch.delenv(RAW_ROOT_OVERRIDE_ENV, raising=False)
+    assert raw_root_override_env() == {}
+
+    monkeypatch.setenv(RAW_ROOT_OVERRIDE_ENV, "/cache/raw")
+    assert raw_root_override_env() == {RAW_ROOT_OVERRIDE_ENV: "/cache/raw"}

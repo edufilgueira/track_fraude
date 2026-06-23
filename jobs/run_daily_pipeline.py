@@ -28,7 +28,7 @@ from track_fraude.pipeline.daily import (
 )
 from track_fraude.pos import DEFAULT_POS_API_URL
 from track_fraude.storage import FilePipelineStateRepository, ProcessedScope, processed_root
-from track_fraude.storage.raw_cache import stage_raw_videos_if_configured
+from track_fraude.storage.raw_cache import log_raw_cache_status, stage_raw_videos_if_configured
 from track_fraude_core.db.pipeline_run_repository import PipelineRunRepository
 from track_fraude_core.pipeline_queue import PIPELINE_STATUS_CANCELLED
 
@@ -140,6 +140,7 @@ def main() -> None:
             f"group={run_config.group_code or 'default'} cameras={','.join(camera_ids)}",
             flush=True,
         )
+        log_raw_cache_status(worker=bool(os.getenv("JOB_NAME")))
 
         if not args.dry_run and run_id is None:
             store_db_id = int(config_store.get("store_db_id") or 0)

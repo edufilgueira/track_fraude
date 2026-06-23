@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -184,6 +185,7 @@ def _default_step_runner(
     return run_command_with_cancel(
         command,
         stdout=sys.stdout,
+        env=os.environ.copy(),
         should_cancel=should_cancel,
     )
 
