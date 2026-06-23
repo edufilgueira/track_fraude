@@ -1,11 +1,33 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from track_fraude.models.sync import SyncMap
 from track_fraude.yolo_device import resolve_yolo_device
+
+
+def _log_yolo_device(device: object, *, phase: str) -> None:
+    """Log inequívoco do device usado (GPU vs CPU) para diagnóstico de lentidão."""
+    cuda_available = False
+    gpu_name = "n/a"
+    torch_version = "n/a"
+    try:
+        import torch
+
+        torch_version = torch.__version__
+        cuda_available = bool(torch.cuda.is_available())
+        if cuda_available:
+            gpu_name = torch.cuda.get_device_name(0)
+    except Exception as exc:  # noqa: BLE001
+        gpu_name = f"erro torch: {exc}"
+    print(
+        f"[{phase}] device={device!r} cuda_available={cuda_available} "
+        f"gpu={gpu_name} torch={torch_version}",
+        flush=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -45,7 +67,12 @@ def run_tracking(
 
     cfg = config or TrackRunConfig()
     device = resolve_yolo_device()
+    _log_yolo_device(device, phase="track")
     model = YOLO(cfg.model_name)
+    try:
+        print(f"[track] modelo carregado em device={getattr(model, 'device', 'n/a')}", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
 
     rows: list[dict[str, Any]] = []
     track_ids: set[int] = set()
@@ -66,6 +93,7 @@ def run_tracking(
         verbose=False,
     )
 
+    inference_started = time.perf_counter()
     for stream_index, result in enumerate(stream):
         processed_frames += 1
         frame_idx = _resolve_frame_idx(result, stream_index, vid_stride)
@@ -96,11 +124,22 @@ def run_tracking(
                 }
             )
 
+    inference_elapsed = time.perf_counter() - inference_started
+    ms_per_frame = (inference_elapsed * 1000.0 / processed_frames) if processed_frames else 0.0
+    print(
+        f"[track] frames processados={processed_frames} "
+        f"(frame_count={sync_map.frame_count}, vid_stride={vid_stride}) "
+        f"em {inference_elapsed:.1f}s = {ms_per_frame:.1f} ms/frame",
+        flush=True,
+    )
+
     stats = {
         "detection_count": len(rows),
         "unique_tracks": len(track_ids),
         "frames_with_detections": frames_with_detections,
         "processed_frames": processed_frames,
+        "inference_elapsed_sec": round(inference_elapsed, 2),
+        "ms_per_frame": round(ms_per_frame, 2),
     }
     return rows, stats
 

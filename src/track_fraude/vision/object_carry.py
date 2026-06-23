@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 # Classes COCO úteis para carga (mãos / sacolas / objetos leváveis)
@@ -25,6 +26,15 @@ def _require_ultralytics():
         raise RuntimeError(
             'Ultralytics não instalado. Execute: pip install -e ".[track]"'
         ) from exc
+
+
+@lru_cache(maxsize=2)
+def _load_carry_model(model_name: str):
+    """Carrega o YOLO uma vez por processo (evita reload do disco a cada frame)."""
+    _require_ultralytics()
+    from ultralytics import YOLO
+
+    return YOLO(model_name)
 
 
 def _expand_bbox(
@@ -81,10 +91,7 @@ def detect_carry_objects(
     conf: float = 0.35,
 ) -> CarryObjectDetection:
     """Detecta objetos carregáveis com YOLO; opcionalmente filtra pela ROI da pessoa."""
-    _require_ultralytics()
-    from ultralytics import YOLO
-
-    model = YOLO(model_name)
+    model = _load_carry_model(model_name)
     height, width = frame.shape[:2]
     region = None
     if person_bbox is not None:
