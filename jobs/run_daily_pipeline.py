@@ -28,6 +28,7 @@ from track_fraude.pipeline.daily import (
 )
 from track_fraude.pos import DEFAULT_POS_API_URL
 from track_fraude.storage import FilePipelineStateRepository, ProcessedScope, processed_root
+from track_fraude.storage.raw_cache import stage_raw_videos_if_configured
 from track_fraude_core.db.pipeline_run_repository import PipelineRunRepository
 from track_fraude_core.pipeline_queue import PIPELINE_STATUS_CANCELLED
 
@@ -152,6 +153,15 @@ def main() -> None:
                 worker_id=os.getenv("HOSTNAME"),
                 job_id=os.getenv("JOB_NAME"),
             )
+
+        if not args.dry_run:
+            stage_raw_videos_if_configured(
+                project_root=ROOT,
+                group_code=run_config.group_code,
+                store_id=run_config.store_id,
+                date=args.date,
+            )
+
         result = run_pipeline_steps(
             run_config,
             on_step_start=on_step_start,

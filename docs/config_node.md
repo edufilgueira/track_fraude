@@ -835,6 +835,8 @@ curl -s http://${PC1_IP}:5000/v2/track-fraude-worker/tags/list
 
 > Base da imagem: `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime` (RTX 50 / Blackwell). O build demora mais e a imagem fica ~8 GB.
 
+**Cache local de vídeos raw (worker GPU):** o ScaledJob monta `emptyDir` em `/cache/raw` e define `TRACK_FRAUDE_RAW_CACHE_DIR`. No início de cada pipeline, o worker copia `data/raw/{grupo}/{loja}/{data}/` do NFS para disco local do pod e processa track/vision dali — `processed/` e logs continuam no NFS. No log do job, procure `raw cache: ... MB em Xs`. Sem essa env (dev local), o comportamento anterior é mantido.
+
 ---
 
 ## Passo 10 — Teste de pipeline (Play)
@@ -1074,7 +1076,7 @@ pipelines simultâneos = soma de todas as GPUs em todos os nodes Ready
 | Worker `ContainerCreating` (pull, sem logs)       | Download da imagem ~8 GB ou NFS            | `kubectl describe pod ...` → Events; pre-pull: `sudo k3s crictl pull PC1_IP:5000/track-fraude-worker:latest` no node-01         |
 | Worker falha ao montar volume / `showmount` trava | Firewall RPC no **ctrl-p01** (não no node) | [config_control_plane.md — Passo 2.1](config_control_plane.md#21--firewall-nfs-para-gpu-nodes); `timeout 10 showmount -e PC1_IP` |
 | Worker `Error` track CUDA `no kernel image`        | PyTorch antigo (RTX 50 / sm_120)       | Rebuild worker com `pytorch:2.7.1-cuda12.8` (Passo 9.1)                                                                          |
-| Track lento, `nvidia-smi` 0% durante inferência   | Ultralytics em CPU (`m.device` = cpu)  | Rebuild worker com `device=0` em track/vision; confirme `ultralytics device: cuda:0` após predict                               |
+| Track lento, `nvidia-smi` 0% durante inferência   | Ultralytics em CPU (`m.device` = cpu) ou I/O NFS frame a frame | Confirme `cuda: True` no pod; worker usa `TRACK_FRAUDE_RAW_CACHE_DIR` (staging local de raw antes do track); `nvidia-smi` deve subir util na fase track |
 | Worker `Error` na fase track (`No module named 'lap'`) | ByteTrack sem dep `lap`            | Rebuild `Dockerfile.worker` (`lap>=0.5.12`)                                                                                     |
 | Worker `Error` (schema Postgres)                  | Imagem worker antiga                       | Rebuild/push `Dockerfile.worker` (Passo 9.1)                                                                                     |
 | Job criado mas não roda no node                   | Node `NotReady` ou sem GPU livre           | `kubectl describe node`; jobs antigos ocupando GPU                                                                               |

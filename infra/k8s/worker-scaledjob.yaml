@@ -68,16 +68,23 @@ spec:
                     fieldPath: metadata.labels['job-name']
               - name: PYTHONUNBUFFERED
                 value: "1"
+              # Copia raw do NFS para disco local do pod antes do track (evita I/O lento frame a frame).
+              - name: TRACK_FRAUDE_RAW_CACHE_DIR
+                value: /cache/raw
             resources:
               limits:
                 nvidia.com/gpu: 1
             volumeMounts:
               - name: data
                 mountPath: /app/data
+              - name: raw-cache
+                mountPath: /cache/raw
         volumes:
           - name: data
             persistentVolumeClaim:
               claimName: track-fraude-data
+          - name: raw-cache
+            emptyDir: {}
   triggers:
     - type: rabbitmq
       metadata:

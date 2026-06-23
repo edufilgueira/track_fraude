@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,9 @@ def output_root(project_root: Path | str) -> Path:
 
 def raw_root(project_root: Path | str) -> Path:
     """Raiz dos vídeos brutos (antes do processamento)."""
+    override = os.getenv("TRACK_FRAUDE_RAW_ROOT", "").strip()
+    if override:
+        return Path(override)
     return Path(project_root) / DEFAULT_RAW_DIR
 
 
