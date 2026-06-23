@@ -541,6 +541,14 @@ docker push ${PC1_IP}:5000/track-fraude-server:latest
 docker push ${PC1_IP}:5000/track-fraude-worker:latest
 docker push ${PC1_IP}:5000/atlas-platform-api:latest
 ```
+#### Antes/depois de cada build do worker, evita lotar o SSD
+```bash
+# exemplo:
+docker builder prune -af          # antes
+docker build -f Dockerfile.worker -t REG:5000/track-fraude-worker:latest .
+docker push REG:5000/track-fraude-worker:latest
+docker builder prune -af          # depois (opcional)
+```
 
 Sucesso esperado no push:
 
