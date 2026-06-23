@@ -113,6 +113,12 @@ def main() -> None:
         current = pipeline_repo.get_run(run_id)
         return current is not None and current.status == PIPELINE_STATUS_CANCELLED
 
+    build_marker = os.getenv("TRACK_FRAUDE_WORKER_BUILD", "dev")
+    print(
+        f"================ WORKER BUILD={build_marker} (raw-cache-v2 + track-metrics) ================",
+        flush=True,
+    )
+
     try:
         config_store = load_job_store_config(args)
         camera_ids = camera_ids_from_config(config_store)
